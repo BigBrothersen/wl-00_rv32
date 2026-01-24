@@ -1,0 +1,16 @@
+{
+    "files.associations": {
+        "uart.h": "c",
+        "random": "cpp",
+        "istream": "cpp",
+        "streambuf": "cpp",
+        "regex": "cpp",
+        "cstdint": "cpp",
+        "stdint.h": "c",
+        "defs.h": "c",
+        "bitset": "cpp",
+        "csr.h": "c",
+        "spinlock.h": "c",
+        "kprint.h": "c"
+    }
+}
