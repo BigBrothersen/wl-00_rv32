@@ -15,6 +15,7 @@ typedef pte_t* pagetable_t;
 #define PTE2PA(pte) ((((uint32_t)(pte)) >> 10) << 12)
 #define PA2PTE(pa)  ((((uint32_t)(pa)) >> 12) << 10)
 #define PA2VA(pa) ((void*)((uint32_t)(pa) + KERNBASE))
+#define PTE_FLAGS(pte) ((pte) & 0x3FF)
 
 // Virtual memory definitions
 #define VIRTUAL_ADDRESS_BITS 32
@@ -42,4 +43,5 @@ int paging_status();
 pte_t *find_pte(pagetable_t pt, uint32_t va, int alloc);
 uint32_t find_pa(pagetable_t pt, uint32_t va);
 int copyin(pagetable_t pt, char *dst, uint32_t src_va, uint32_t len);
+int uvmcopy(pagetable_t old_pt, pagetable_t new_pt, uint32_t sz);
 #endif

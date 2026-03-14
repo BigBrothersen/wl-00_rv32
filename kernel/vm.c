@@ -4,6 +4,8 @@
 #include "mem.h"
 #include "csr.h"
 #include "vm.h"
+#include "proc.h"
+#include "syscall.h"
 
 /*
     Each process will have its own page table (an array of pointers where each pointer points to a direct page within the physical memory or frame)
@@ -160,7 +162,7 @@ pte_t *find_pte(pagetable_t pt, uint32_t va, int alloc)
             return 0;
         pt = (pagetable_t)kalloc();
         if (pt == 0) {
-            error("what");
+            error("find_pte: NULL address");
             return 0;
         }
         memset(pt, 0, PAGE_SIZE);

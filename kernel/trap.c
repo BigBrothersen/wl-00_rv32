@@ -62,14 +62,16 @@ void u_trap_handle(uint32_t scause, uint32_t sepc) {
     if ((r_sstatus() & SSTATUS_SPP) != 0)
         error("Trap not from u-mode\n");
     struct proc *p = this_cpu()->proc;
+    printf("Handling program for process %d\n", p->pid);
     p->tf->epc = sepc; // save program counter
     if (scause == SCAUSE_USER_ECALL) {
         // printf("TRAP from u-mode: scause %p, sepc %p\n", scause, sepc);
-        syscall();  // handle the syscall 
         p->tf->epc += 4;
+        syscall();  // handle the syscall 
     }
     else {
         error("usertrap(): unexpected scause");
+        // int x = 0;
     }
     utrapret();
 }

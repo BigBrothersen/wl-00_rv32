@@ -5,6 +5,7 @@
 #include "kprint.h"
 #include "spinlock.h"
 #include "rv.h"
+#include "uart.h"
 #include "initcode.h"
 
 struct cpu cpus[NCPU];
@@ -34,6 +35,23 @@ pagetable_t init_userpt()
     pt = (pagetable_t)ptcreate();
     if (pt == 0)
         return NULL;    
+    
+    // Map text up to trampoline
+    uint32_t text_len = (uint32_t)_trampoline - KERNBASE;
+    mappages(pt, KERNBASE, KERNBASE, text_len, PTE_R | PTE_X | PTE_V);
+    // Map trampoline
+    mappages(pt, (uint32_t)_trampoline, (uint32_t)_trampoline, PAGE_SIZE, PTE_R | PTE_X | PTE_V);
+    // Map Kernel Data
+    uint32_t data_start = (uint32_t)_trampoline + PAGE_SIZE;
+    mappages(pt, data_start, data_start, MEM_END - data_start, PTE_R | PTE_W | PTE_V);
+    // Map UART
+    mappages(pt, UART_0, UART_0, PAGE_SIZE, PTE_R | PTE_W | PTE_V);
+
+    // uint32_t text_len = (uint32_t)_etext - KERNBASE;
+    // mappages(pt, KERNBASE, KERNBASE, text_len, PTE_R | PTE_X | PTE_V);
+    // mappages(pt, (uint32_t)_etext, (uint32_t)_etext, MEM_END - (uint32_t)_etext, PTE_R | PTE_W | PTE_V);
+    // mappages(pt, (uint32_t)_trampoline, (uint32_t)_trampoline, PAGE_SIZE, PTE_R | PTE_X | PTE_V);
+    
     return pt;
 }
 
@@ -62,9 +80,9 @@ struct proc *procalloc()
     if (p->tf == 0) return NULL;
     memset(p->tf, 0, PAGE_SIZE);
     
-    p->pt = (pagetable_t)kalloc();
+    p->pt = (pagetable_t)init_userpt();
     if (p->pt == 0) return NULL;
-    memset(p->pt, 0, PAGE_SIZE);
+    // memset(p->pt, 0, PAGE_SIZE);
 
     //forkret
     p->context.ra = (uint32_t)forkret;
@@ -92,17 +110,34 @@ void print_proctable()
   }
 }
 
+// TODO: releaseproc
+void releaseproc(struct proc *p)
+{
+    // p->pid = 0;
+    // p->state = UNUSED;
+    // p->name[0] = NULL;
+    // p->pt = NULL;
+    // p->kstack = 0;
+    // p->sz = 0;
+    // p->tf = NULL;
+    // p->parent = NULL;
+    // p->context = ;
+
+    return;
+}
+
 // Executes the first user mode program in the kernel.
-void uvmfirst(struct proc *p, uint32_t sepc, uint32_t sp) {
+void uvmfirst(struct proc *p, uint32_t sepc, uint32_t sp) 
+{
     lock(&p->lock);
     
     // Map kernel memory
-    uint32_t text_len = (uint32_t)_etext - KERNBASE;
-    mappages(p->pt, KERNBASE, KERNBASE, text_len, PTE_R | PTE_X | PTE_V);
-    mappages(p->pt, (uint32_t)_etext, (uint32_t)_etext, MEM_END - (uint32_t)_etext, PTE_R | PTE_W | PTE_V);
-    mappages(p->pt, (uint32_t)_trampoline, (uint32_t)_trampoline, PAGE_SIZE, PTE_R | PTE_X | PTE_V);
+    // uint32_t text_len = (uint32_t)_etext - KERNBASE;
+    // mappages(p->pt, KERNBASE, KERNBASE, text_len, PTE_R | PTE_X | PTE_V);
+    // mappages(p->pt, (uint32_t)_etext, (uint32_t)_etext, MEM_END - (uint32_t)_etext, PTE_R | PTE_W | PTE_V);
+    // mappages(p->pt, (uint32_t)_trampoline, (uint32_t)_trampoline, PAGE_SIZE, PTE_R | PTE_X | PTE_V);
 
-    // // Allocate physical memory to user program
+    // Allocate physical memory to user program
     void *user_pa = kalloc();
     memset(user_pa, 0, PAGE_SIZE);
     if (user_init_bin_len > PAGE_SIZE)
@@ -138,20 +173,51 @@ void uvmfirst(struct proc *p, uint32_t sepc, uint32_t sp) {
     p->tf->k_satp = (uint32_t)MAKE_SATP((uint32_t)kptable);
     p->tf->k_trap = (uint32_t)kerneltrap;
     p->tf->u_trap = (uint32_t)u_trap_handle;
-    
+
+    p->sz = 0x1000 + PAGE_SIZE;    
     p->state = READY;
     this_cpu()->proc = p;
     unlock(&p->lock);
 }
 
+int uvmcopy(pagetable_t old_pt, pagetable_t new_pt, uint32_t sz) 
+{
+    pagetable_t pte;
+    uint32_t va;
 
-// TODO: make this at user mode!
+    for (va = 0x1000; va < sz; va += PAGE_SIZE) {
+        pte = find_pte(old_pt, va, 0);
+
+        if (!pte || (*pte & PTE_V) == 0) continue;
+
+        uint32_t pa = PTE2PA(*pte);
+        uint32_t flags = PTE_FLAGS(*pte);
+
+        void *mem; // Allocate page
+        if ((mem = kalloc()) == NULL) {
+            // TODO: free all the pages
+            error("uvmcopy: kalloc");
+            return -1;
+        }
+
+        memmove(mem, (void *)pa, PAGE_SIZE);
+        if (mappage(new_pt, va, (uint32_t)mem, flags) == NULL) {
+            error("uvmcopy: mappage");
+            // TODO: free all the pages
+            return -1;
+        }
+    }
+    return 0;
+}
+
+
 // first user process executed
 void init_userproc()
 {
     struct proc *p;
     // printf("User process init\n");
     p = procalloc();
+    // printf("pid %d", p->pid);
     if (!p){
         error("procalloc fail");
         return;
@@ -169,10 +235,13 @@ void scheduler()
         interrupt_on();
         interrupt_off();
         int run = 0;
+        // printf("Looping while\n");
         for (p = proctable; p < &proctable[NPROC]; p++) {
             // acquire lock
             lock(&p->lock);
+            // printf("Looping proctable\n");
             if (p->state == READY) {
+                printf("Found new process with pid %d\n", p->pid);
                 p->state = RUNNING;
                 c->proc = p;
                 // printf("test");
@@ -180,19 +249,70 @@ void scheduler()
                 // Process is done running
                 run = 1;
                 c->proc = 0;
-                printf("Here");
+                printf("Process exited looking for another process to run\n");
             }
-            // release lock
+            // release lock (from sys_exit)
             unlock(&p->lock);
         }
         if(!run) asm volatile("wfi");
     }
 }
 
+void sched()
+{
+    struct cpu *c = this_cpu();
+    struct proc *p = this_cpu()->proc;
+    if (!holding(&p->lock)) {
+        error("sched: no lock");
+    }
+    if (c->depth != 1) {
+        error("sched: multiple lock held");
+    }
+    if (p->state == RUNNING) {
+        error("sched: process still running");
+    }
+    int intena = c->intena;
+    swtch(&p->context, &c->context);
+    c->intena = intena;
+}
 
 void forkret()
 {
     struct proc *p = this_cpu()->proc;
     unlock(&p->lock);
     utrapret();
+}
+
+int fork() {
+    struct proc *p = this_cpu()->proc;
+    struct proc *np = procalloc();
+    if (!np) {
+        error("sys_fork: procalloc fail");
+        // TODO: free process slot
+        return -1;
+    }
+    if (uvmcopy(p->pt, np->pt, p->sz) < 0) {
+        // TODO: free process slot (fix release proc)
+        releaseproc(np);
+        return -1;
+    }
+
+    np->sz = p->sz;
+    uint32_t child_ksp = np->tf->k_sp;
+    *(np->tf) = *(p->tf);
+    np->tf->k_sp = child_ksp;
+    np->tf->regs[10] = 0;   // set child return value as 0
+
+    lock(&np->lock);
+    np->parent = p;
+    np->state = READY;
+    unlock(&np->lock);
+
+    // printf("old process\n");
+    // print_proc(*p);
+    // printf("new process\n");
+    // print_proc(*np);
+    // print_proctable();
+
+    return np->pid;
 }

@@ -34,6 +34,13 @@ void argint(int n, int *ip) {
 
 // TODO: implement sys_exit
 uint32_t sys_exit(){
+    struct proc *p = this_cpu()->proc;
+    lock(&p->lock);
+    p->state = END;
+    sched(); // transition to sched
+    while(1) {
+        error("sys_exit: failed to return");
+    }
     return 0;
 }
 
@@ -50,7 +57,7 @@ uint32_t sys_exec() {
 }
 
 uint32_t sys_fork() {
-    return 0; // proc.c
+    return fork();
 }
 
 uint32_t sys_read() {
@@ -63,25 +70,24 @@ uint32_t sys_write() {
     uint32_t p_buf; // User Virtual Address
     int n;
 
-    // 1. Fetch Arguments
+    // Fetch Arguments
     argint(0, &fd);
     argaddr(1, &p_buf); // Fetches a0, a1, a2
     argint(2, &n);
 
-    // 2. Safety Checks
+    // Safety Checks
     if (fd != 1) return -1; // Only stdout supported for now
     if (n < 0 || n > 1024) return -1; // Safety cap
 
-    // 3. Allocate Kernel Buffer
+    // Allocate Kernel Buffer
     char kbuf[128]; 
     
-    // Simple loop for large writes
     int wrote = 0;
     while (wrote < n) {
         int chunk = n - wrote;
         if (chunk > 127) chunk = 127; // Copy in small chunks
 
-        // 4. The Magic: Copy from User to Kernel
+        // copy from User to Kernel
         if (copyin(this_cpu()->proc->pt, kbuf, p_buf + wrote, chunk) == -1) {
             printf("sys_write: fault at %p\n", p_buf + wrote);
             return -1;

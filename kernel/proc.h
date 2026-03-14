@@ -51,11 +51,14 @@ struct proc {
     
     struct spinlock lock;
     struct context context;
+
+    struct proc *parent;
 };
 
 extern struct cpu cpus[NCPU];
 extern struct proc proctable[NPROC];
 
+struct proc *procalloc();
 struct cpu *this_cpu();
 void init_proctable();
 void print_proctable();
@@ -63,4 +66,8 @@ void init_userproc();
 void swtch(struct context*, struct context*); // swtch.S
 void scheduler();
 void forkret();
+void sched();
+void releaseproc(struct proc *p);
+
+int fork();
 #endif

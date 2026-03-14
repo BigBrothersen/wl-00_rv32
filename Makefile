@@ -70,3 +70,6 @@ clean:
 	rm -f $K/*.o $(OUTPUT) $(INITCODE_HEADER) $U/*.o $U/*.elf $U/*.bin
 
 .PHONY: all clean run
+
+# qemu-system-riscv32 -machine virt -bios none -kernel kernel.elf -nographic -serial mon:stdio -smp 8 -s -S
+# gdb -ex "target remote :1234" kernel.elf
