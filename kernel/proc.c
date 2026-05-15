@@ -130,12 +130,6 @@ void releaseproc(struct proc *p)
 void uvmfirst(struct proc *p, uint32_t sepc, uint32_t sp) 
 {
     lock(&p->lock);
-    
-    // Map kernel memory
-    // uint32_t text_len = (uint32_t)_etext - KERNBASE;
-    // mappages(p->pt, KERNBASE, KERNBASE, text_len, PTE_R | PTE_X | PTE_V);
-    // mappages(p->pt, (uint32_t)_etext, (uint32_t)_etext, MEM_END - (uint32_t)_etext, PTE_R | PTE_W | PTE_V);
-    // mappages(p->pt, (uint32_t)_trampoline, (uint32_t)_trampoline, PAGE_SIZE, PTE_R | PTE_X | PTE_V);
 
     // Allocate physical memory to user program
     void *user_pa = kalloc();
@@ -144,19 +138,7 @@ void uvmfirst(struct proc *p, uint32_t sepc, uint32_t sp)
         error("initcode too big");
     memmove(user_pa, user_init_bin, user_init_bin_len);
 
-    // uint32_t *program = (uint32_t*)user_pa;
-    // program[0] = 0x00700893;   // addi a7, zero, 7 (original, but we change it)
-    // program[1] = 0x00100513;  
-    // program[2] = 0x000025B7;   // lui a1, 0x1 (sets a1 to 0x1000)
-    // program[3] = 0x02c00613;   // addi a2, zero, 42 (set a2 to 42)
-    // program[4] = 0x00000073;   // ecall
     mappage(p->pt, sepc, (uint32_t)user_pa, PTE_R | PTE_X | PTE_U | PTE_V);
-
-    // // Debug
-    // va2pa(p->pt, sepc);
-    // va2pa(p->pt, sepc+4);
-    // printf("value of pa: %p\n", find_pa(p->pt, sepc));
-    // printf("value of pa: %p\n", find_pa(p->pt, sepc+4));
 
     // // Map user stack
     void *stack_pa = kalloc();

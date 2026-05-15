@@ -92,10 +92,9 @@ uint32_t sys_write() {
             printf("sys_write: fault at %p\n", p_buf + wrote);
             return -1;
         }
-        
+
         kbuf[chunk] = 0; // Null terminate for printf safety
         printf("%s", kbuf); // Send to UART
-        
         wrote += chunk;
     }
     
@@ -133,7 +132,7 @@ void syscall() {
     int syscall_num = p->tf->regs[17]; // reference a7
     // printf("syscall_num a0 is %d\n", syscall_num);
 
-    if (syscall <= 0 || syscall_num > SYS_GETPID) {
+    if (syscall_num <= 0 || syscall_num > SYS_GETPID) {
         printf("Error: Invalid syscall %d\n", syscall_num);
         p->tf->regs[10] = -1; // set a0 as -1 for return value
         return;
