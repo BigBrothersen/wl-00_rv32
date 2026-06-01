@@ -1,4 +1,4 @@
-#include "kprint.h" // debug
+// #include "kprint.h" // debug
 #include "defs.h"
 #include "uart.h"
 #include "mem.h"
@@ -207,4 +207,48 @@ int copyin(pagetable_t pt, char *dst, uint32_t src_va, uint32_t len)
         src_va += n; 
     }
     return 0;
+}
+
+// unmap inside pt, va is start address up to size
+void uvmunmap(pagetable_t pt, uint32_t va, uint32_t size, int free) {
+    if (va % PAGE_SIZE != 0) {
+        error("va not aligned");
+    }
+    for (uint32_t curr = va; curr < va + size; curr += PAGE_SIZE) {
+        pte_t *pte = find_pte(pt, curr, 0);
+        if (pte && (*pte & PTE_V)) {
+            if (free) {
+                uint32_t pa = PTE2PA(*pte);
+                kfree((void *)pa);
+            }
+            *pte = 0;
+        }
+    }
+}
+
+void uvmfree(pagetable_t pt, uint32_t size) {
+    if (size % PAGE_SIZE != 0) {
+        error("size not aligned");
+    }
+    if (size > 0) {
+        uvmunmap(pt, 0x1000, size, 1);
+    }
+    uvmunmap(pt, USER_STACK_TOP - PAGE_SIZE, PAGE_SIZE, 1);
+    freewalk(pt);
+}
+
+void freewalk(pagetable_t pt) {
+    for (int i = 0; i < 1024; i++) {
+        pte_t pte1 = pt[i];
+        if (pte1 & PTE_V) {
+            pte_t* pt_2 = (pte_t *)PTE2PA(pte1); 
+            // for (int j = 0; j < 1024; j++) {
+            //     if (pt_2[j] & PTE_V) {
+            //         kfree((void *)PTE2PA(pt_2[j]));
+            //     }
+            // }
+            kfree((void *)pt_2); 
+        }
+    }
+    kfree((void *)pt);
 }
