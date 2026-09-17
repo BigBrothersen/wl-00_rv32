@@ -43,5 +43,9 @@ int paging_status();
 pte_t *find_pte(pagetable_t pt, uint32_t va, int alloc);
 uint32_t find_pa(pagetable_t pt, uint32_t va);
 int copyin(pagetable_t pt, char *dst, uint32_t src_va, uint32_t len);
+int copyout(pagetable_t pt, uint32_t dst_va, char *src, uint32_t len);
 int uvmcopy(pagetable_t old_pt, pagetable_t new_pt, uint32_t sz);
+void freewalk(pagetable_t pt);
+void uvmunmap(pagetable_t pt, uint32_t va, uint32_t size, int free);
+void uvmfree(pagetable_t pt, uint32_t size);
 #endif

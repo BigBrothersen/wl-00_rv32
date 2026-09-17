@@ -32,20 +32,38 @@ parent_code:
     li a7, 7
     ecall
 
+    li a0, 0    # addr = NULL, don't care about the child's status
+    li a7, 3    # sys_wait
+    ecall
+
+    li a0, 1
+    la a1, msg_reaped
+    li a2, 16
+    li a7, 7
+    ecall
+
+    li a0, 0    # exit status
     li a7, 1
     ecall
 
 child_code:
+    # Exercise the stack for real (previously fork() never mapped it for
+    # the child) instead of just carrying the pointer value around.
+    addi sp, sp, -16
+    li t0, 0x1234
+    sw t0, 0(sp)
+    lw t1, 0(sp)
+    addi sp, sp, 16
+
     li a0, 1
     la a1, msg_child
     li a2, 16
     li a7, 7
     ecall
 
-    j loop
-
-loop:
-    j loop
+    li a0, 7    # exit status
+    li a7, 1
+    ecall
 
 
 msg:
@@ -57,3 +75,6 @@ msg_parent:
 
 msg_child:
     .string "Child\n"
+
+msg_reaped:
+    .string "Reaped\n"

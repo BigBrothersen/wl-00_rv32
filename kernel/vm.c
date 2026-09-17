@@ -7,6 +7,8 @@
 #include "proc.h"
 #include "syscall.h"
 
+#include "kprint.h"
+
 /*
     Each process will have its own page table (an array of pointers where each pointer points to a direct page within the physical memory or frame)
     VA	Purpose	PA
@@ -204,7 +206,26 @@ int copyin(pagetable_t pt, char *dst, uint32_t src_va, uint32_t len)
         memmove(dst, (void *)(uintptr_t)src_pa, n);
         len -= n;
         dst += n;
-        src_va += n; 
+        src_va += n;
+    }
+    return 0;
+}
+
+// Takes in kernel memory and copies it piecewise into user virtual memory, page by page.
+int copyout(pagetable_t pt, uint32_t dst_va, char *src, uint32_t len)
+{
+    while (len > 0) {
+        uint32_t dst_pa = find_pa(pt, dst_va);
+        if (dst_pa == 0)
+            return -1;
+        uint32_t offset = dst_pa % PAGE_SIZE;
+        uint32_t n = PAGE_SIZE - offset;
+        if (n > len)
+            n = len;
+        memmove((void *)(uintptr_t)dst_pa, src, n);
+        len -= n;
+        src += n;
+        dst_va += n;
     }
     return 0;
 }

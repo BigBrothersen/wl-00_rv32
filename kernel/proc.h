@@ -9,7 +9,7 @@
 
 
 
-enum procstate { UNUSED, NEW, READY, RUNNING, WAITING, END };
+enum procstate { UNUSED, NEW, READY, RUNNING, WAITING, ZOMBIE };
 
 
 struct context {
@@ -48,7 +48,8 @@ struct proc {
     uint32_t kstack; // top of the kstack, s-mode region of the process
     uint32_t sz; // size of process
     struct trapframe_t *tf; // trapframe of process
-    
+    int xstate; // exit status, valid once state == ZOMBIE
+
     struct spinlock lock;
     struct context context;
 
@@ -67,7 +68,9 @@ void swtch(struct context*, struct context*); // swtch.S
 void scheduler();
 void forkret();
 void sched();
+void yield();
 void releaseproc(struct proc *p);
 
 int fork();
+int wait(uint32_t addr);
 #endif

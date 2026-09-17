@@ -110,20 +110,28 @@ void print_proctable()
   }
 }
 
-// TODO: releaseproc
+// Frees everything owned by a proc slot (tf, kstack, and pt if it's still
+// around) and hands the slot back to UNUSED. Caller must not be running on
+// p's kstack (i.e. this is called by a reaper, never by p itself).
 void releaseproc(struct proc *p)
 {
-    // p->pid = 0;
-    // p->state = UNUSED;
-    // p->name[0] = NULL;
-    // p->pt = NULL;
-    // p->kstack = 0;
-    // p->sz = 0;
-    // p->tf = NULL;
-    // p->parent = NULL;
-    // p->context = ;
+    if (p->tf)
+        kfree((void *)p->tf);
+    if (p->pt)
+        uvmfree(p->pt, p->sz);
+    if (p->kstack)
+        kfree((void *)p->kstack);
 
-    return;
+    p->pid = 0;
+    p->state = UNUSED;
+    p->name[0] = 0;
+    p->pt = NULL;
+    p->kstack = 0;
+    p->sz = 0;
+    p->tf = NULL;
+    p->parent = NULL;
+    p->xstate = 0;
+    memset(&p->context, 0, sizeof(p->context));
 }
 
 // Executes the first user mode program in the kernel.
@@ -147,6 +155,7 @@ void uvmfirst(struct proc *p, uint32_t sepc, uint32_t sp)
 
     // Load trapframe data to process
     p->tf->epc = sepc;
+    p->tf->regs[2] = sp; // x2 = user sp; the `sp` param was never wired up before
     p->tf->k_sp = p->kstack + PAGE_SIZE;
 
     // uint32_t root_pa = (uint32_t)kptable;
@@ -189,6 +198,32 @@ int uvmcopy(pagetable_t old_pt, pagetable_t new_pt, uint32_t sz)
             return -1;
         }
     }
+
+    // The user stack lives at USER_STACK_TOP, far above `sz`, so the loop
+    // above never reaches it - copy it explicitly or the child ends up
+    // with no stack mapped at all.
+    uint32_t stack_va = USER_STACK_TOP - PAGE_SIZE;
+    pte = find_pte(old_pt, stack_va, 0);
+    if (!pte || (*pte & PTE_V) == 0) {
+        error("uvmcopy: parent has no stack mapped");
+        return -1;
+    }
+
+    uint32_t stack_pa = PTE2PA(*pte);
+    uint32_t stack_flags = PTE_FLAGS(*pte);
+
+    void *stack_mem;
+    if ((stack_mem = kalloc()) == NULL) {
+        error("uvmcopy: kalloc (stack)");
+        return -1;
+    }
+
+    memmove(stack_mem, (void *)stack_pa, PAGE_SIZE);
+    if (mappage(new_pt, stack_va, (uint32_t)stack_mem, stack_flags) == NULL) {
+        error("uvmcopy: mappage (stack)");
+        return -1;
+    }
+
     return 0;
 }
 
@@ -258,6 +293,18 @@ void sched()
     c->intena = intena;
 }
 
+// Give up the CPU for one scheduling round without changing our own state
+// beyond READY. Used by wait() to poll for a zombie child since this
+// kernel has no sleep()/wakeup() channel mechanism yet.
+void yield()
+{
+    struct proc *p = this_cpu()->proc;
+    lock(&p->lock);
+    p->state = READY;
+    sched();
+    unlock(&p->lock);
+}
+
 void forkret()
 {
     struct proc *p = this_cpu()->proc;
@@ -295,6 +342,47 @@ int fork() {
     // printf("new process\n");
     // print_proc(*np);
     // print_proctable();
+    
+    p->tf->regs[10] = np->pid;
 
     return np->pid;
+}
+
+// Waits for any child to become a zombie, reaps it, and returns its pid.
+// If addr is non-zero, the child's exit status is copied out to that user
+// address. Returns -1 if the caller has no children at all.
+int wait(uint32_t addr)
+{
+    struct proc *p = this_cpu()->proc;
+
+    for (;;) {
+        int have_children = 0;
+
+        for (struct proc *q = proctable; q < &proctable[NPROC]; q++) {
+            if (q->parent != p)
+                continue;
+            have_children = 1;
+
+            lock(&q->lock);
+            if (q->state == ZOMBIE) {
+                int pid = q->pid;
+                int xstate = q->xstate;
+                unlock(&q->lock);
+
+                if (addr != 0 && copyout(p->pt, addr, (char *)&xstate, sizeof(xstate)) < 0) {
+                    error("wait: copyout failed");
+                    return -1;
+                }
+
+                releaseproc(q);
+                return pid;
+            }
+            unlock(&q->lock);
+        }
+
+        if (!have_children)
+            return -1;
+
+        yield();
+    }
 }
