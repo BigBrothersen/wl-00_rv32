@@ -97,8 +97,10 @@ pte_t *mappage(pagetable_t pt, uint32_t va, uint32_t pa, int flags) {
 
     if ((pt[vpn1] & PTE_V) == 0) {
         pte_t pt_addr = (pte_t)kalloc();   // Allocate new page for second level page table
-        if (!pt_addr)
+        if (!pt_addr) {
             error("kalloc not allocated");
+            return NULL;
+        }
         memset((void *)pt_addr, 0, PAGE_SIZE); // Zero out the new page
         pt[vpn1] = ((pt_addr >> 12) << 10) | PTE_V; // Set the (Page Physical Number) and valid bit
     }

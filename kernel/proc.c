@@ -38,14 +38,18 @@ pagetable_t init_userpt()
     
     // Map text up to trampoline
     uint32_t text_len = (uint32_t)_trampoline - KERNBASE;
-    mappages(pt, KERNBASE, KERNBASE, text_len, PTE_R | PTE_X | PTE_V);
+    if (mappages(pt, KERNBASE, KERNBASE, text_len, PTE_R | PTE_X | PTE_V) < 0)
+        goto fail;
     // Map trampoline
-    mappages(pt, (uint32_t)_trampoline, (uint32_t)_trampoline, PAGE_SIZE, PTE_R | PTE_X | PTE_V);
+    if (mappages(pt, (uint32_t)_trampoline, (uint32_t)_trampoline, PAGE_SIZE, PTE_R | PTE_X | PTE_V) < 0)
+        goto fail;
     // Map Kernel Data
     uint32_t data_start = (uint32_t)_trampoline + PAGE_SIZE;
-    mappages(pt, data_start, data_start, MEM_END - data_start, PTE_R | PTE_W | PTE_V);
+    if (mappages(pt, data_start, data_start, MEM_END - data_start, PTE_R | PTE_W | PTE_V) < 0)
+        goto fail;
     // Map UART
-    mappages(pt, UART_0, UART_0, PAGE_SIZE, PTE_R | PTE_W | PTE_V);
+    if (mappages(pt, UART_0, UART_0, PAGE_SIZE, PTE_R | PTE_W | PTE_V) < 0)
+        goto fail;
 
     // uint32_t text_len = (uint32_t)_etext - KERNBASE;
     // mappages(pt, KERNBASE, KERNBASE, text_len, PTE_R | PTE_X | PTE_V);
@@ -53,6 +57,11 @@ pagetable_t init_userpt()
     // mappages(pt, (uint32_t)_trampoline, (uint32_t)_trampoline, PAGE_SIZE, PTE_R | PTE_X | PTE_V);
     
     return pt;
+
+fail:
+    // Only kernel mappings live here, so free just the page-table pages
+    freewalk(pt);
+    return NULL;
 }
 
 // Find empty process field and returns the address to the process struct. Only for user process only.
@@ -72,16 +81,17 @@ struct proc *procalloc()
     p->state = NEW;
     p->pid = curr_pid++;
     
-    void *kstack_pa = kalloc();
-    if (kstack_pa == 0) return NULL;
-    p->kstack = (uint32_t)kstack_pa; 
+    // Assign before checking: init_proctable leaves a static address in
+    // kstack, which releaseproc must not kfree if this kalloc fails.
+    p->kstack = (uint32_t)kalloc();
+    if (p->kstack == 0) goto fail;
     
     p->tf = (struct trapframe_t *)kalloc();
-    if (p->tf == 0) return NULL;
+    if (p->tf == 0) goto fail;
     memset(p->tf, 0, PAGE_SIZE);
     
     p->pt = (pagetable_t)init_userpt();
-    if (p->pt == 0) return NULL;
+    if (p->pt == 0) goto fail;
     // memset(p->pt, 0, PAGE_SIZE);
 
     //forkret
@@ -91,6 +101,11 @@ struct proc *procalloc()
     // printf("allocted tf to %p\n", p->tf);
     // printf("user page table addr: %p\n", p->pt);
     return p;
+
+fail:
+    // Hand back whatever was allocated and return the slot to UNUSED
+    releaseproc(p);
+    return NULL;
 }
 
 // Debug: prints process metadata
@@ -186,16 +201,15 @@ int uvmcopy(pagetable_t old_pt, pagetable_t new_pt, uint32_t sz)
 
         void *mem; // Allocate page
         if ((mem = kalloc()) == NULL) {
-            // TODO: free all the pages
             error("uvmcopy: kalloc");
-            return -1;
+            goto fail;
         }
 
         memmove(mem, (void *)pa, PAGE_SIZE);
         if (mappage(new_pt, va, (uint32_t)mem, flags) == NULL) {
             error("uvmcopy: mappage");
-            // TODO: free all the pages
-            return -1;
+            kfree(mem);
+            goto fail;
         }
     }
 
@@ -206,7 +220,7 @@ int uvmcopy(pagetable_t old_pt, pagetable_t new_pt, uint32_t sz)
     pte = find_pte(old_pt, stack_va, 0);
     if (!pte || (*pte & PTE_V) == 0) {
         error("uvmcopy: parent has no stack mapped");
-        return -1;
+        goto fail;
     }
 
     uint32_t stack_pa = PTE2PA(*pte);
@@ -215,16 +229,23 @@ int uvmcopy(pagetable_t old_pt, pagetable_t new_pt, uint32_t sz)
     void *stack_mem;
     if ((stack_mem = kalloc()) == NULL) {
         error("uvmcopy: kalloc (stack)");
-        return -1;
+        goto fail;
     }
 
     memmove(stack_mem, (void *)stack_pa, PAGE_SIZE);
     if (mappage(new_pt, stack_va, (uint32_t)stack_mem, stack_flags) == NULL) {
         error("uvmcopy: mappage (stack)");
-        return -1;
+        kfree(stack_mem);
+        goto fail;
     }
 
     return 0;
+
+fail:
+    // Free the pages copied so far, i.e. everything mapped in [0x1000, va).
+    // The page table itself is left for the caller to free (releaseproc).
+    uvmunmap(new_pt, 0x1000, va - 0x1000, 1);
+    return -1;
 }
 
 
@@ -316,12 +337,13 @@ int fork() {
     struct proc *p = this_cpu()->proc;
     struct proc *np = procalloc();
     if (!np) {
+        // procalloc already released the slot and anything it allocated
         error("sys_fork: procalloc fail");
-        // TODO: free process slot
         return -1;
     }
     if (uvmcopy(p->pt, np->pt, p->sz) < 0) {
-        // TODO: free process slot (fix release proc)
+        // uvmcopy freed the pages it copied; releaseproc frees the page
+        // table, trapframe and kstack and marks the slot UNUSED
         releaseproc(np);
         return -1;
     }
