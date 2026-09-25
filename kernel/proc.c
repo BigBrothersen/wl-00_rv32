@@ -38,14 +38,18 @@ pagetable_t init_userpt()
     
     // Map text up to trampoline
     uint32_t text_len = (uint32_t)_trampoline - KERNBASE;
-    mappages(pt, KERNBASE, KERNBASE, text_len, PTE_R | PTE_X | PTE_V);
+    if (mappages(pt, KERNBASE, KERNBASE, text_len, PTE_R | PTE_X | PTE_V) < 0)
+        goto fail;
     // Map trampoline
-    mappages(pt, (uint32_t)_trampoline, (uint32_t)_trampoline, PAGE_SIZE, PTE_R | PTE_X | PTE_V);
+    if (mappages(pt, (uint32_t)_trampoline, (uint32_t)_trampoline, PAGE_SIZE, PTE_R | PTE_X | PTE_V) < 0)
+        goto fail;
     // Map Kernel Data
     uint32_t data_start = (uint32_t)_trampoline + PAGE_SIZE;
-    mappages(pt, data_start, data_start, MEM_END - data_start, PTE_R | PTE_W | PTE_V);
+    if (mappages(pt, data_start, data_start, MEM_END - data_start, PTE_R | PTE_W | PTE_V) < 0)
+        goto fail;
     // Map UART
-    mappages(pt, UART_0, UART_0, PAGE_SIZE, PTE_R | PTE_W | PTE_V);
+    if (mappages(pt, UART_0, UART_0, PAGE_SIZE, PTE_R | PTE_W | PTE_V) < 0)
+        goto fail;
 
     // uint32_t text_len = (uint32_t)_etext - KERNBASE;
     // mappages(pt, KERNBASE, KERNBASE, text_len, PTE_R | PTE_X | PTE_V);
@@ -53,6 +57,11 @@ pagetable_t init_userpt()
     // mappages(pt, (uint32_t)_trampoline, (uint32_t)_trampoline, PAGE_SIZE, PTE_R | PTE_X | PTE_V);
     
     return pt;
+
+fail:
+    // Only kernel mappings live here, so free just the page-table pages
+    freewalk(pt);
+    return NULL;
 }
 
 // Find empty process field and returns the address to the process struct. Only for user process only.
@@ -72,9 +81,10 @@ struct proc *procalloc()
     p->state = NEW;
     p->pid = curr_pid++;
     
-    void *kstack_pa = kalloc();
-    if (kstack_pa == 0) goto fail;
-    p->kstack = (uint32_t)kstack_pa; 
+    // Assign before checking: init_proctable leaves a static address in
+    // kstack, which releaseproc must not kfree if this kalloc fails.
+    p->kstack = (uint32_t)kalloc();
+    if (p->kstack == 0) goto fail;
     
     p->tf = (struct trapframe_t *)kalloc();
     if (p->tf == 0) goto fail;
