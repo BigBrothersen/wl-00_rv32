@@ -1,0 +1,4 @@
+*.o
+*.elf
+*.bin
+kernel/initcode.h
