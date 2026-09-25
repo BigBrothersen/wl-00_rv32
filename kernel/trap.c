@@ -6,30 +6,47 @@
 #include "proc.h"
 #include "trap.h"
 #include "syscall.h"
+#include "rv.h"
 
 void kerneltrap();  // kerneltrap.S
 void usertrap();    // usertrap.S
 void usertrapret(); // usertrapret.S
 
-void main();
-
 // Initializes trap vector into kerneltrap. A dedicated handler for traps happening in supervisor mode.
-void init_trap() 
+void init_trap()
 {
     w_stvec((uint32_t)kerneltrap); // write stvec into s-mode trap handler
 }
 
-// Set satp back to the user pagetable before sret
+// Handle an interrupt. Returns 1 if it was recognised and handled, 0 otherwise.
+// TODO(M1): timer (code 5) and external/PLIC (code 9) interrupts go here.
+static int devintr(uint32_t scause)
+{
+    uint32_t code = scause & 0x7FFFFFFF;
+    switch (code) {
+        case 1: // supervisor software interrupt: nothing uses it yet, just acknowledge
+            w_sip(r_sip() & ~(1 << 1));
+            return 1;
+        default:
+            return 0;
+    }
+}
 
+// Set satp back to the user pagetable before sret
 void utrapret() {
-    struct proc *p = this_cpu()->proc;
-    
+    struct proc *p = myproc();
+
+    // Interrupts must stay off until sret: from here on stvec points at
+    // usertrap, which assumes it was entered from user mode.
+    interrupt_off();
+
     w_stvec((uint32_t)usertrap);
-    
+
     // Set sscratch to trapframe for next user trap
     w_sscratch((uint32_t)p->tf);
 
-    p->tf->k_sp = p->kstack + PAGE_SIZE; 
+    p->tf->k_sp = p->kstack + PAGE_SIZE;
+    p->tf->k_hartid = r_tp(); // usertrap.S restores tp from here
 
     // Prepare to return to user mode
     unsigned long x = r_sstatus();
@@ -39,7 +56,7 @@ void utrapret() {
 
     // Set return address to user code
     w_sepc(p->tf->epc);
-    
+
     // Switch to user page table
     __asm__ volatile("sfence.vma zero, zero");
     w_satp(MAKE_SATP((uint32_t)p->pt));
@@ -49,62 +66,67 @@ void utrapret() {
     // Pass the trapframe address as parameter in a0
     __asm__ volatile(
         "mv a0, %0\n\t"    // Pass trapframe address as first argument
-        "jr %1" 
-        : 
+        "jr %1"
+        :
         : "r" (p->tf), "r" (usertrapret)
         : "a0"
     );
+    __builtin_unreachable();
 }
 
 
 // Handle traps happening in u-mode
 void u_trap_handle(uint32_t scause, uint32_t sepc) {
     if ((r_sstatus() & SSTATUS_SPP) != 0)
-        error("Trap not from u-mode\n");
-    struct proc *p = this_cpu()->proc;
-    printf("Handling program for process %d\n", p->pid);
+        panic("u_trap_handle: trap not from u-mode");
+    struct proc *p = myproc();
     p->tf->epc = sepc; // save program counter
-    if (scause == SCAUSE_USER_ECALL) {
-        // printf("TRAP from u-mode: scause %p, sepc %p\n", scause, sepc);
+    if (scause & 0x80000000) {
+        if (!devintr(scause)) {
+            printf("u_trap_handle: unexpected interrupt scause %p\n", scause);
+            panic("u_trap_handle");
+        }
+    }
+    else if (scause == SCAUSE_USER_ECALL) {
         p->tf->epc += 4;
-        syscall();  // handle the syscall 
+        syscall();  // handle the syscall
     }
     else {
-        error("usertrap(): unexpected scause");
-        // int x = 0;
+        // Faulting user code: returning would just re-run the faulting
+        // instruction forever, so kill the process.
+        printf("pid %d (%s): killed, scause %p sepc %p stval %p\n",
+               p->pid, p->name, scause, sepc, r_stval());
+        kexit(-1);
     }
     utrapret();
 }
 
-// Handle traps happening in s-mode/kernelmode TODO
+// Handle traps happening in s-mode/kernelmode
 void s_trap_handle(uint32_t scause, uint32_t sepc) {
+    // A handler that ends up yielding (M1) may take other traps before we
+    // return here, which would clobber these CSRs.
+    uint32_t sstatus = r_sstatus();
 
-    int is_interrupt = (scause & 0x80000000);
+    if ((sstatus & SSTATUS_SPP) == 0)
+        panic("s_trap_handle: trap not from s-mode");
+    if (is_interrupt())
+        panic("s_trap_handle: interrupts enabled");
 
-    if (is_interrupt) {
-        uint32_t code = scause & 0x7FFFFFFF;
-        printf("Interrupt received: %d\n", code);
-        // TEMPORARY: If it's a timer (IRQ 5), clear it so we don't loop forever
-        // w_sip(r_sip() & ~(1 << 5)); 
-        return; 
-    }
-
-    switch (scause) {
-        case 0x8:
-        case 0x9:
-            printf("Syscall/Ecall detected (scause %d) at %p\n", scause, sepc);
-            w_sepc(sepc + 4);
-            break;
-        case 0xb:
-            printf("Syscall/Ecall detected (scause %d) at %p\n", scause, sepc);
-            w_sepc(sepc + 4);
-            break;
-        default: {
-            printf("KERNEL PANIC! Unhandled Exception.\n");
-            printf("scause: %p\n", scause);
-            printf("sepc:   %p\n", sepc);
-            printf("stval:  %p (Bad Address)\n", r_stval());
-            while(1);
+    if (scause & 0x80000000) {
+        if (!devintr(scause)) {
+            printf("unexpected interrupt: scause %p, sepc %p\n", scause, sepc);
+            panic("s_trap_handle");
         }
     }
+    else {
+        // The kernel never expects an exception of its own.
+        hang = 1; // don't block on print_lock: this hart may be holding it
+        printf("scause: %p\n", scause);
+        printf("sepc:   %p\n", sepc);
+        printf("stval:  %p (Bad Address)\n", r_stval());
+        panic("unhandled exception in kernel");
+    }
+
+    w_sepc(sepc);
+    w_sstatus(sstatus);
 }

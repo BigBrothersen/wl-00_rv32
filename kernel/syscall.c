@@ -4,7 +4,7 @@
 // #include "fd.h"
 
 uint32_t argraw(int n) {
-    struct proc *p = this_cpu()->proc;
+    struct proc *p = myproc();
     switch(n) {
         case 0:
             return p->tf->regs[10];
@@ -35,44 +35,12 @@ void argint(int n, int *ip) {
 uint32_t sys_exit(){
     int status;
     argint(0, &status);
-
-    struct proc *p = this_cpu()->proc;
-
-    // Reparent any children we leave behind to pid 1, if it still exists
-    // and isn't us. Otherwise they're simply orphaned (no init yet).
-    struct proc *reaper = NULL;
-    for (struct proc *q = proctable; q < &proctable[NPROC]; q++) {
-        if (q->pid == 1 && q != p) {
-            reaper = q;
-            break;
-        }
-    }
-    for (struct proc *q = proctable; q < &proctable[NPROC]; q++) {
-        if (q->parent == p) {
-            lock(&q->lock);
-            q->parent = reaper;
-            unlock(&q->lock);
-        }
-    }
-
-    // Tear down the address space now: by this point satp is already the
-    // kernel page table (usertrap.S switched it before we got here), so
-    // p->pt is no longer in use by hardware and is safe to free. The
-    // kernel stack and trapframe stay alive - we're still running on the
-    // kstack - until a parent reaps this proc via wait().
-    uvmfree(p->pt, p->sz);
-    p->pt = NULL;
-
-    lock(&p->lock);
-    p->xstate = status;
-    p->state = ZOMBIE;
-    sched(); // never returns
-    error("sys_exit: zombie returned");
-    return 0;
+    kexit(status); // never returns
 }
 
+// Unimplemented syscalls fail with -1 rather than pretending to succeed.
 uint32_t sys_open() {
-    return 0;
+    return -1;
 }
 
 uint32_t sys_wait() {
@@ -86,13 +54,13 @@ uint32_t sys_exec() {
 
     // 1. Copy in the arguments. path and argv are user-space pointers in the caller's current (old) address space — pull them into kernel buffers via copyin before anything else changes, exactly like sys_write already does with its buffer.
 
-    char path[128], *argv[32]; // TODO: Change max args
-    int path_size;
-    uint32_t uargv, uarg;
-
-    argaddr(1, &uargv);
-    argint(2, &path_size);
-    if (path_size > 127) return -1;
+    // char path[128], *argv[32]; // TODO: Change max args
+    // int path_size;
+    // uint32_t uargv, uarg;
+    //
+    // argaddr(1, &uargv);
+    // argint(2, &path_size);
+    // if (path_size > 127) return -1;
 
     // Get path
     
@@ -115,9 +83,7 @@ uint32_t sys_exec() {
 
     // 7. Return. sys_exec returns argc on success (by convention); on any failure before step 6, just kfree/uvmfree whatever partial new-page-table state was built and return -1 — the caller's original image was never touched, so it just resumes as if the call had failed like any other syscall.
 
-    
-
-    return 0;
+    return -1; // not implemented yet
 }
 
 uint32_t sys_fork() {
@@ -125,7 +91,7 @@ uint32_t sys_fork() {
 }
 
 uint32_t sys_read() {
-    return 0;
+    return -1;
 }
 
 // TODO: sanity check, argument extraction, call k_write from fs.c
@@ -152,7 +118,7 @@ uint32_t sys_write() {
         if (chunk > 127) chunk = 127; // Copy in small chunks
 
         // copy from User to Kernel
-        if (copyin(this_cpu()->proc->pt, kbuf, p_buf + wrote, chunk) == -1) {
+        if (copyin(myproc()->pt, kbuf, p_buf + wrote, chunk) == -1) {
             printf("sys_write: fault at %p\n", p_buf + wrote);
             return -1;
         }
@@ -166,34 +132,34 @@ uint32_t sys_write() {
 }
 
 uint32_t sys_brk(){
-    return 0;
+    return -1;
 }
 
 uint32_t sys_kill(){
-    return 0;
+    return -1;
 }
 
 uint32_t sys_getpid() {
-    return this_cpu()->proc->pid;
+    return myproc()->pid;
 }
 
 static uint32_t (*syscalls[])(void) = {
-    [SYS_EXIT]      sys_exit,
-    [SYS_OPEN]      sys_open,
-    [SYS_WAIT]      sys_wait,
-    [SYS_EXEC]      sys_exec,
-    [SYS_FORK]      sys_fork,
-    [SYS_READ]      sys_read,
-    [SYS_WRITE]     sys_write,
-    [SYS_BRK]       sys_brk,
-    [SYS_KILL]      sys_kill,
-    [SYS_GETPID]    sys_getpid,
+    [SYS_EXIT]    = sys_exit,
+    [SYS_OPEN]    = sys_open,
+    [SYS_WAIT]    = sys_wait,
+    [SYS_EXEC]    = sys_exec,
+    [SYS_FORK]    = sys_fork,
+    [SYS_READ]    = sys_read,
+    [SYS_WRITE]   = sys_write,
+    [SYS_BRK]     = sys_brk,
+    [SYS_KILL]    = sys_kill,
+    [SYS_GETPID]  = sys_getpid,
 };
 
 
 // Determine the type of syscall from a7 register
 void syscall() {
-    struct proc *p = this_cpu()->proc;
+    struct proc *p = myproc();
     int syscall_num = p->tf->regs[17]; // reference a7
     // printf("syscall_num a0 is %d\n", syscall_num);
 

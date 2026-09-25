@@ -7,7 +7,7 @@ int is_interrupt() {
 }
 
 void interrupt_on() {
-    w_sstatus(r_sstatus() & SSTATUS_SIE);
+    w_sstatus(r_sstatus() | SSTATUS_SIE);
 }
 
 void interrupt_off() {

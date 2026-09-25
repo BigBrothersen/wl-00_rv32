@@ -44,6 +44,7 @@ usertrap:
     csrr t1, sepc
     sw t1, 16(a0)
 
+    lw tp, 148(a0)  # restore this hart's id: tp belongs to user code while in u-mode
     lw sp, 0(a0)    # load kernel stack pointer
     lw t0, 4(a0)    # load kerneltrap
     lw t1, 8(a0)    # load k_satp

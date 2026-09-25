@@ -1,7 +1,6 @@
 #include <stdint.h>
 #include "spinlock.h"
 #include "kprint.h"
-#include "gpr.h"
 #include "rv.h"
 #include "proc.h"
 #include "csr.h"
@@ -37,9 +36,9 @@ void push_off() {
 void pop_off() {
     struct cpu *curr_cpu = this_cpu();
     if (is_interrupt())
-        error("pop_off - interruptable");
+        panic("pop_off - interruptable");
     if (curr_cpu->depth < 1)
-        error("push_off depth less than 1");
+        panic("push_off depth less than 1");
     curr_cpu->depth--;
     if (curr_cpu->depth == 0 && curr_cpu->intena)
         interrupt_on(); // Restore interrupt
@@ -52,7 +51,7 @@ int holding(struct spinlock *lk) {
 void lock(struct spinlock *lk) {
     push_off();
     if (holding(lk))
-        error("trying to lock locked spinlock");
+        panic("trying to lock locked spinlock");
     while (atomic_swap((uint32_t *)&lk->lock, 1) != 0){
         ;
     }
@@ -64,7 +63,7 @@ void lock(struct spinlock *lk) {
 
 void unlock(struct spinlock *lk) {
     if (!holding(lk))
-        error("trying to release unlocked spinlock");
+        panic("trying to release unlocked spinlock");
     lk->cpu = NULL;
     asm volatile("fence" ::: "memory");
     atomic_swap((uint32_t *)&lk->lock, 0);

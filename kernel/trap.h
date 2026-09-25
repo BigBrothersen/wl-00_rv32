@@ -6,7 +6,7 @@
 void init_trap();
 void s_trap_handle(uint32_t scause, uint32_t sepc);
 void u_trap_handle(uint32_t scause, uint32_t sepc);
-void utrapret();
+void utrapret() __attribute__((noreturn));
 
 // Assembly functions
 extern void kerneltrap(); // kerneltrap.S

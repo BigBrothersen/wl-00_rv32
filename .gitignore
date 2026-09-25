@@ -1,0 +1,6 @@
+# build outputs
+*.o
+*.d
+*.elf
+*.bin
+kernel/initcode.h

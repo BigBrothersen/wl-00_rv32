@@ -14,13 +14,12 @@ typedef pte_t* pagetable_t;
 #define PTE_U (1ULL << 4) // user can access
 #define PTE2PA(pte) ((((uint32_t)(pte)) >> 10) << 12)
 #define PA2PTE(pa)  ((((uint32_t)(pa)) >> 12) << 10)
-#define PA2VA(pa) ((void*)((uint32_t)(pa) + KERNBASE))
 #define PTE_FLAGS(pte) ((pte) & 0x3FF)
 
 // Virtual memory definitions
-#define VIRTUAL_ADDRESS_BITS 32
-#define MAX_VA_SIZE_BYTES    (1UL << VIRTUAL_ADDRESS_BITS) // 4 GB
-#define MAX_VA_ADDR          (MAX_VA_SIZE_BYTES - 1)       // 0xFFFFFFFF
+// (1UL << 32 overflows on ilp32, where unsigned long is 32 bits, so spell it out)
+#define MAX_VA_ADDR          0xFFFFFFFFu                    // top of the 4 GB Sv32 space
+#define USER_BASE            0x1000u                        // user image is loaded here; page 0 stays unmapped
 #define TRAMPOLINE           (MAX_VA_ADDR - PAGE_SIZE + 1)   // store trampoline at the upper virtual address (1 page)
 #define TRAPFRAME            (TRAMPOLINE - PAGE_SIZE)  // store trapframe just under the trampoline (1 page)
 #define USER_STACK_TOP       (TRAPFRAME - PAGE_SIZE)    // user stack starts in a page just under trapframe (grows downwards)

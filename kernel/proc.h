@@ -30,14 +30,16 @@ struct cpu {
     struct context context;
 };
 
-// global trapframe variable that saves user processes register when CPU transitions into supervisor mode
-__attribute__((aligned(8))) struct trapframe_t {
+// Per-process trapframe that saves user processes register when CPU transitions into supervisor mode.
+// Offsets are hard-coded in usertrap.S / usertrapret.S: keep them in sync.
+struct __attribute__((aligned(8))) trapframe_t {
     uint32_t k_sp;      // 0
     uint32_t k_trap;    // 4
     uint32_t k_satp;    // 8
     uint32_t u_trap;    // 12
     uint32_t epc;       // 16
-    uint32_t regs[32];  // 20, x0 is omitted
+    uint32_t regs[32];  // 20, regs[i] = x{i} at 20 + 4*i (x0 slot unused)
+    uint32_t k_hartid;  // 148, restored into tp on trap entry: user code owns tp
 };
 
 struct proc {
@@ -61,6 +63,7 @@ extern struct proc proctable[NPROC];
 
 struct proc *procalloc();
 struct cpu *this_cpu();
+struct proc *myproc();
 void init_proctable();
 void print_proctable();
 void init_userproc();
@@ -73,4 +76,5 @@ void releaseproc(struct proc *p);
 
 int fork();
 int wait(uint32_t addr);
+void kexit(int status) __attribute__((noreturn));
 #endif

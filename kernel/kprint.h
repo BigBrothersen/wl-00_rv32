@@ -5,9 +5,12 @@
 void putchar(char c);
 void print_string(char *c);
 void printf(char *fmt, ...);
-void printint(int32_t num, uint8_t base);
 void print_addr(uint32_t addr);
 void printint(int32_t num, uint8_t base);
 void error(char *str);
+void panic(char *str) __attribute__((noreturn));
+uint32_t strlen(char *str);
+
+extern int hang; // set once panicking: printf stops taking print_lock
 
 #endif

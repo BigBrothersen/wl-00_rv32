@@ -49,7 +49,8 @@ kerneltrap:
     # 4. Restore Context
     lw ra, 0(sp)
     lw gp, 8(sp)
-    lw tp, 12(sp)
+    # not tp: if the handler yields (M1), we may resume on a different hart,
+    # and tp must keep naming the hart we are on now.
     
     lw t0, 16(sp)
     lw t1, 20(sp)

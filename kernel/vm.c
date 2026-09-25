@@ -53,19 +53,19 @@ pagetable_t kptable_make() {
 int mappages(pagetable_t pt, uint32_t va, uint32_t pa, uint32_t size, int flags) {
     if ((va % PAGE_SIZE) != 0){
         error("mappages: va not aligned");
-        return 0;
+        return -1;
     }
     if ((pa % PAGE_SIZE) != 0) {
         error("mappages: pa not aligned");
-        return 0;
+        return -1;
     }
     if ((size % PAGE_SIZE) != 0) {
         error("mappages: size not aligned");
-        return 0;
+        return -1;
     }
     if (size == 0) {
         error("mappages: size 0");
-        return 0;
+        return -1;
     }
 
     // Calculate mapping boundaries
@@ -73,8 +73,9 @@ int mappages(pagetable_t pt, uint32_t va, uint32_t pa, uint32_t size, int flags)
     pte_t *pte;
     int ret = 0;
 
-    // Map each page in the range
-    for (uint32_t curr_va = va; curr_va < end; curr_va += PAGE_SIZE, pa += PAGE_SIZE) {
+    // Map each page in the range. Compare with != rather than <, because
+    // 'end' wraps to 0 when the range reaches the top of the address space.
+    for (uint32_t curr_va = va; curr_va != end; curr_va += PAGE_SIZE, pa += PAGE_SIZE) {
         pte = mappage(pt, curr_va, pa, flags);
         if (!pte) {
             error("mappages: failed to map va to pa");
@@ -85,28 +86,22 @@ int mappages(pagetable_t pt, uint32_t va, uint32_t pa, uint32_t size, int flags)
     return ret;
 }
 
-// Map a single page in page table
+// Map a single page in page table. Returns NULL if a second-level table
+// could not be allocated.
 pte_t *mappage(pagetable_t pt, uint32_t va, uint32_t pa, int flags) {
     if ((va % PAGE_SIZE) != 0)
-        error("mappage: va not aligned");
+        panic("mappage: va not aligned");
     if ((pa % PAGE_SIZE) != 0)
-        error("mappage: pa not aligned");
+        panic("mappage: pa not aligned");
 
-    uint32_t vpn1 = (va >> 22) & 0x3ff; // Shift 22 bits to right
-    uint32_t vpn0 = (va >> 12) & 0x3ff; // Shift 12 bits to the right
+    pte_t *pte = find_pte(pt, va, 1);
+    if (pte == 0)
+        return 0;
+    if (*pte & PTE_V)
+        panic("mappage: remap of an already-mapped va");
+    *pte = PA2PTE(pa) | flags | PTE_V;
 
-    if ((pt[vpn1] & PTE_V) == 0) {
-        pte_t pt_addr = (pte_t)kalloc();   // Allocate new page for second level page table
-        if (!pt_addr)
-            error("kalloc not allocated");
-        memset((void *)pt_addr, 0, PAGE_SIZE); // Zero out the new page
-        pt[vpn1] = ((pt_addr >> 12) << 10) | PTE_V; // Set the (Page Physical Number) and valid bit
-    }
-
-    pte_t *table = (uint32_t*)((pt[vpn1] >> 10) << 12);
-    table[vpn0] = ((pa >> 12) << 10) | flags | PTE_V;
-
-    return &table[vpn0];
+    return pte;
 }
 
 void set_satp(pagetable_t pt) {
@@ -151,8 +146,6 @@ int paging_status() {
 // Returns virtual address of the PTE
 pte_t *find_pte(pagetable_t pt, uint32_t va, int alloc) 
 {
-    if (va >= MAX_VA_ADDR)
-        error("error finding pa");
     uint32_t vpn1 = (va >> 22) & 0x3ff; // shift 22 bits to right
     uint32_t vpn0 = (va >> 12) & 0x3ff;
     pte_t *pte1 = &pt[vpn1];
@@ -173,30 +166,27 @@ pte_t *find_pte(pagetable_t pt, uint32_t va, int alloc)
     return &pt[vpn0];
 }
 
-uint32_t find_pa(pagetable_t pt, uint32_t va) {
-    if (va >= MAX_VA_ADDR)
-        return 0;
-
-    pte_t *pte;
-    uint32_t pa;
-
-    pte = find_pte(pt, va, 0);
-    // printf("find_pa debug: va=%p, pte_ptr=%p\n", va, pte);
+// Translate a user va. Returns 0 unless the page is valid, user-accessible,
+// and has every permission bit in 'need' (e.g. PTE_W before a kernel write).
+static uint32_t find_user_pa(pagetable_t pt, uint32_t va, int need) {
+    pte_t *pte = find_pte(pt, va, 0);
     if (pte == 0)
         return 0;
-    if((*pte & PTE_V) == 0)
+    if ((*pte & (PTE_V | PTE_U | need)) != (PTE_V | PTE_U | need))
         return 0;
-    if((*pte & PTE_U) == 0)
-        return 0;
-    pa = PTE2PA(*pte);
-    return pa + (va & 0xFFF); 
+    return PTE2PA(*pte) + (va & 0xFFF);
+}
+
+// Translate a user va to its pa (0 if unmapped or not user-accessible).
+uint32_t find_pa(pagetable_t pt, uint32_t va) {
+    return find_user_pa(pt, va, 0);
 }
 
 // Takes in virtual memory and copy data piecewise into the real physical page, page by page.
 int copyin(pagetable_t pt, char *dst, uint32_t src_va, uint32_t len)
 {
     while (len > 0) {
-        uint32_t src_pa = find_pa(pt, src_va); // Find the current physical address the current pa actually resides
+        uint32_t src_pa = find_user_pa(pt, src_va, PTE_R); // Find the current physical address the current pa actually resides
         if (src_pa == 0)
             return -1;
         uint32_t offset = src_pa % PAGE_SIZE;
@@ -215,7 +205,7 @@ int copyin(pagetable_t pt, char *dst, uint32_t src_va, uint32_t len)
 int copyout(pagetable_t pt, uint32_t dst_va, char *src, uint32_t len)
 {
     while (len > 0) {
-        uint32_t dst_pa = find_pa(pt, dst_va);
+        uint32_t dst_pa = find_user_pa(pt, dst_va, PTE_W); // never let the kernel write into user text
         if (dst_pa == 0)
             return -1;
         uint32_t offset = dst_pa % PAGE_SIZE;
@@ -232,8 +222,8 @@ int copyout(pagetable_t pt, uint32_t dst_va, char *src, uint32_t len)
 
 // unmap inside pt, va is start address up to size
 void uvmunmap(pagetable_t pt, uint32_t va, uint32_t size, int free) {
-    if (va % PAGE_SIZE != 0) {
-        error("va not aligned");
+    if (va % PAGE_SIZE != 0 || size % PAGE_SIZE != 0) {
+        panic("uvmunmap: not aligned");
     }
     for (uint32_t curr = va; curr < va + size; curr += PAGE_SIZE) {
         pte_t *pte = find_pte(pt, curr, 0);
@@ -247,12 +237,14 @@ void uvmunmap(pagetable_t pt, uint32_t va, uint32_t size, int free) {
     }
 }
 
+// Free a user address space. 'size' is p->sz: the end va of the user image,
+// which occupies [USER_BASE, size).
 void uvmfree(pagetable_t pt, uint32_t size) {
     if (size % PAGE_SIZE != 0) {
-        error("size not aligned");
+        panic("uvmfree: size not aligned");
     }
-    if (size > 0) {
-        uvmunmap(pt, 0x1000, size, 1);
+    if (size > USER_BASE) {
+        uvmunmap(pt, USER_BASE, size - USER_BASE, 1);
     }
     uvmunmap(pt, USER_STACK_TOP - PAGE_SIZE, PAGE_SIZE, 1);
     freewalk(pt);

@@ -2,13 +2,14 @@
 #include "kprint.h"
 #include "defs.h"
 #include "mem.h"
-// #include "mutex.h"
+#include "spinlock.h"
 // Kernel file for memory management
 // Allocates physical memory
 
 // Bitmap of available physical memories in form of pages. 1 is available, 0 is occupied page.
 static uint8_t mem_bitmap[NUM_PAGES];
 static char *start_page;
+static struct spinlock mem_lock; // guards mem_bitmap; every hart allocates
 
 // Checks if page at bitmap i is empty
 uint8_t page_empty(int i) {
@@ -49,6 +50,7 @@ void print_mem(uint32_t addr, int len, int increment)
 
 // Initializes the bitmap, only called during booting phase
 void init_bitmap(){
+    init_lock(&mem_lock, "mem");
     start_page = (char *)PGROUNDUP((uintptr_t)end);
     int i;
     for (i = 0; i < page_idx(start_page); i++) {
@@ -59,13 +61,12 @@ void init_bitmap(){
 
 // Free all pages from start_pa to end_pa
 void kfree_range(void *start_pa, void *end_pa){
-    if (start_pa >= end_pa) return;
     char *curr = (char *)PGROUNDUP((uintptr_t)start_pa);
     char *end = (char *)PGROUNDDOWN((uintptr_t)end_pa);
-    do {
+    while (curr < end) {
         kfree(curr);
         curr += PAGE_SIZE;
-    } while (curr < (char *)end);
+    }
 }
 
 // Returns page index of a physical address. Must be larger than KERNBASE.
@@ -89,29 +90,44 @@ void *memset(void *ptr, int value, uint32_t num) {
 
 // Function to free the physical memory pointed by the page address
 void kfree(void *pa){
+    if ((uintptr_t)pa % PAGE_SIZE != 0)
+        panic("kfree: address not page aligned");
+    if ((char *)pa < start_page || (uintptr_t)pa >= MEM_END)
+        panic("kfree: address outside the allocatable range");
     int i = page_idx(pa);
-    if (i < 0 || i > NUM_PAGES-1) {
-        error("failed to free memory");
-        return;
+    memset(pa, 0, PAGE_SIZE); // Set all pages to 0 (before publishing it as free)
+    lock(&mem_lock);
+    if (mem_bitmap[i]) {
+        unlock(&mem_lock);
+        panic("kfree: double free");
     }
     mem_bitmap[i] = 1;
-    memset((void *)PGROUNDDOWN((uintptr_t)pa), 0, PAGE_SIZE); // Set all pages to 0
-    pa = NULL; // set pointer back to NULL
+    unlock(&mem_lock);
 }
 
 // Allocates a single page of physical memory. Returns a pointer pointing to the allocated page.
 // If process fails return null pointer.
 void *kalloc(){
     char *addr;
+    lock(&mem_lock);
     for (int i = 0; i < NUM_PAGES; i++) {
         if (mem_bitmap[i]) {
             mem_bitmap[i] = 0;
-            addr = (char*)(MEM_START + i*PAGE_SIZE);
+            unlock(&mem_lock);
+            addr = (char*)(uintptr_t)(MEM_START + i*PAGE_SIZE);
             // printf("allocated page %d %d with address %p", i, page_idx(addr), addr);
             return addr;
         }
-    } 
+    }
+    unlock(&mem_lock);
     return NULL;
+}
+
+// The compiler may emit calls to memcpy for struct assignment even in
+// freestanding mode, so it must exist.
+void *memcpy(void *dst, const void *src, uint32_t n)
+{
+    return memmove(dst, src, n);
 }
 
 // TODO: change later so no plagiarism

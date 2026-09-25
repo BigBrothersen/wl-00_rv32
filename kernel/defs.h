@@ -2,12 +2,12 @@
 #define __DEF__
 #include <stdint.h>
 
-#define NULL (void *)0X0ULL
+#define NULL ((void *)0)
 #define PHYSTOP (0x80000000 + 128*1024*1024) // 128 MB top of RAM
 #define PGSIZE 4096 // 4KB
 
 // proc.h
-#define NCPU 4
+#define NCPU 4  // keep in sync with boot_asm.S and the stack reservation in kernel.ld
 #define NPROC 32
 
 // Memory section addresses, refer to kernel.ld for more info

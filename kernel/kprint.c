@@ -3,6 +3,8 @@
 #include "kprint.h"
 #include "uart.h"
 #include "spinlock.h"
+#include "rv.h"
+#include "csr.h"
 
 // TODO: migrate print functions to user space
 
@@ -15,7 +17,7 @@ struct spinlock print_lock;
 uint32_t strlen(char *str)
 {
     uint32_t count = 0;
-    while (*str != '\0') {
+    while (*str++ != '\0') {
         count++;
     }
     return count;
@@ -26,9 +28,21 @@ void error(char *str)
     printf("error: %s\n", str);
 }
 
+// Unrecoverable kernel error: print and halt this hart. Sets 'hang' so printf
+// stops taking print_lock (the panicking hart may already hold it) and the
+// other harts' output can't deadlock us.
+void panic(char *str)
+{
+    interrupt_off();
+    hang = 1;
+    printf("KERNEL PANIC (cpu %d): %s\n", r_tp(), str);
+    while (1)
+        ;
+}
+
 void putchar(char c)
 {
-    *(volatile char*)UART_0 = c;
+    uart_putc(c);
 }
 
 void print_string(char *str)
@@ -42,7 +56,6 @@ void print_addr(uint32_t addr)
 {
     print_string("0x");
     for (int i = 28; i >= 0; i -= 4) {
-        int digit = (addr >> i) & 0xF;
         putchar(digits[(addr >> i) & 0xF]);
     }
 }
@@ -50,7 +63,7 @@ void print_addr(uint32_t addr)
 // TODO: implement printint. will expand to different base and size later
 void print_uint(uint32_t num, uint8_t base) 
 {
-    char nums[64]; // larger buffer for 64-bit numbers
+    char nums[32]; // enough for a 32-bit number in base 2
     int i = 0;
     do {
         nums[i++] = digits[num % base];
@@ -69,18 +82,20 @@ void printint(int32_t num, uint8_t base)
         error("printint: invalid base");
         return;
     }
-    char nums[16];
+    char nums[34];
     int i;
     int negative;
+    uint32_t n;
     negative = 0;
+    n = num;
     if (num < 0){
         negative = 1;
-        num = -num;
+        n = -(uint32_t)num; // well-defined for INT32_MIN too
     }
     i = 0;
     do {
-        nums[i++] = digits[num % base];
-    } while((num /= base) != 0);
+        nums[i++] = digits[n % base];
+    } while((n /= base) != 0);
     if (negative) {
         nums[i++] = '-';
     }
@@ -103,7 +118,8 @@ void printf(char *fmt, ...)
             fmt++;
             switch (*fmt) {
                 case '\0':{
-                    error("printf: format specifier followed by null");
+                    // not error(): that would re-enter printf and deadlock on print_lock
+                    print_string("printf: format specifier followed by null\n");
                     terminate = 1;
                     break;
                 }
@@ -114,14 +130,14 @@ void printf(char *fmt, ...)
                     break;
                 }
                 case 'u':{
-                    unsigned long long num = va_arg(args, unsigned long long);
+                    uint32_t num = va_arg(args, uint32_t);
                     print_uint(num, 10);
                     fmt++;
                     break;
                 }
                 case 'x':{
-                    int num = va_arg(args, int) ;
-                    printint(num, 16);
+                    uint32_t num = va_arg(args, uint32_t);
+                    print_uint(num, 16);
                     fmt++;
                     break;
                 }
