@@ -139,19 +139,12 @@ void uvmfirst(struct proc *p, uint32_t sepc, uint32_t sp)
 {
     lock(&p->lock);
 
-    // Allocate physical memory to user program
-    void *user_pa = kalloc();
-    memset(user_pa, 0, PAGE_SIZE);
-    if (user_init_bin_len > PAGE_SIZE)
-        error("initcode too big");
-    memmove(user_pa, user_init_bin, user_init_bin_len);
-
-    mappage(p->pt, sepc, (uint32_t)user_pa, PTE_R | PTE_X | PTE_U | PTE_V);
-
-    // // Map user stack
-    void *stack_pa = kalloc();
-    memset(stack_pa, 0, PAGE_SIZE);
-    mappage(p->pt, USER_STACK_TOP - PAGE_SIZE, (uint32_t)stack_pa, PTE_R | PTE_W | PTE_U | PTE_V);
+    // Load the program (any number of pages) and map the user stack
+    uint32_t sz = uvmload(p->pt, user_init_bin, user_init_bin_len);
+    if (sz == 0)
+        error("uvmfirst: cannot load initcode");
+    if (uvmstack(p->pt) == NULL)
+        error("uvmfirst: cannot map stack");
 
     // Load trapframe data to process
     p->tf->epc = sepc;
@@ -165,7 +158,8 @@ void uvmfirst(struct proc *p, uint32_t sepc, uint32_t sp)
     p->tf->k_trap = (uint32_t)kerneltrap;
     p->tf->u_trap = (uint32_t)u_trap_handle;
 
-    p->sz = 0x1000 + PAGE_SIZE;    
+    p->sz = sz;
+    safestrcpy(p->name, "init", sizeof(p->name));
     p->state = READY;
     this_cpu()->proc = p;
     unlock(&p->lock);

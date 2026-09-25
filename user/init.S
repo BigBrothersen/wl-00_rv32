@@ -61,6 +61,34 @@ child_code:
     li a7, 7
     ecall
 
+    # exec of an unknown program must fail and return -1
+    la a0, path_bogus
+    li a1, 0
+    li a7, 4    # sys_exec
+    ecall
+    li t0, -1
+    bne a0, t0, exec_failed
+
+    li a0, 1
+    la a1, msg_bogus
+    li a2, 32
+    li a7, 7
+    ecall
+
+    # replace this process with "hello", passing two arguments
+    la a0, path_hello
+    la a1, hello_argv
+    li a7, 4    # sys_exec
+    ecall
+
+exec_failed:
+    # only reached if exec did not behave
+    li a0, 1
+    la a1, msg_execfail
+    li a2, 16
+    li a7, 7
+    ecall
+
     li a0, 7    # exit status
     li a7, 1
     ecall
@@ -78,3 +106,24 @@ msg_child:
 
 msg_reaped:
     .string "Reaped\n"
+
+msg_bogus:
+    .string "exec of missing program failed\n"
+
+msg_execfail:
+    .string "exec failed!\n"
+
+path_bogus:
+    .string "nope"
+
+path_hello:
+    .string "hello"
+
+arg_world:
+    .string "world"
+
+    .align 2
+hello_argv:
+    .word path_hello
+    .word arg_world
+    .word 0

@@ -60,6 +60,7 @@ extern struct cpu cpus[NCPU];
 extern struct proc proctable[NPROC];
 
 struct proc *procalloc();
+pagetable_t init_userpt();
 struct cpu *this_cpu();
 void init_proctable();
 void print_proctable();
