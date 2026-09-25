@@ -1,0 +1,20 @@
+name: Boot smoke test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install RISC-V toolchain and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-riscv64-unknown-elf qemu-system-misc xxd
+      - name: Build and boot
+        run: ./scripts/boot-smoke-test.sh
