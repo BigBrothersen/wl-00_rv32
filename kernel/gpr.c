@@ -3,7 +3,8 @@
 
 uint32_t r_t0(){
     uint32_t x;
-    asm volatile("mv %0, a0" : "=r"(x));
+    asm volatile("mv %0, t0" : "=r"(x));
+    return x;
 }
 
 void w_t0(uint32_t x) {
