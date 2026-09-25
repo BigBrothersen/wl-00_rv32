@@ -273,3 +273,45 @@ void freewalk(pagetable_t pt) {
     }
     kfree((void *)pt);
 }
+
+// Load a flat binary of len bytes into pt starting at USER_TEXT, one page at
+// a time. Pages are mapped R|W|X since a flat image carries no section info.
+// Returns the new process size (end of the image, page aligned) or 0 on
+// failure; on failure the caller frees whatever was mapped with uvmfree().
+uint32_t uvmload(pagetable_t pt, const unsigned char *bin, uint32_t len)
+{
+    uint32_t sz = USER_TEXT + PGROUNDUP(len);
+    if (len == 0 || sz >= USER_STACK_TOP - PAGE_SIZE)
+        return 0;
+
+    for (uint32_t off = 0; off < len; off += PAGE_SIZE) {
+        void *pa = kalloc();
+        if (pa == NULL)
+            return 0;
+        memset(pa, 0, PAGE_SIZE);
+        uint32_t n = len - off;
+        if (n > PAGE_SIZE)
+            n = PAGE_SIZE;
+        memmove(pa, bin + off, n);
+        if (mappage(pt, USER_TEXT + off, (uint32_t)pa, PTE_R | PTE_W | PTE_X | PTE_U | PTE_V) == NULL) {
+            kfree(pa);
+            return 0;
+        }
+    }
+    return sz;
+}
+
+// Map a zeroed user stack page just below USER_STACK_TOP. Returns the
+// physical address of the page (so the caller can fill in argv) or NULL.
+void *uvmstack(pagetable_t pt)
+{
+    void *pa = kalloc();
+    if (pa == NULL)
+        return NULL;
+    memset(pa, 0, PAGE_SIZE);
+    if (mappage(pt, USER_STACK_TOP - PAGE_SIZE, (uint32_t)pa, PTE_R | PTE_W | PTE_U | PTE_V) == NULL) {
+        kfree(pa);
+        return NULL;
+    }
+    return pa;
+}

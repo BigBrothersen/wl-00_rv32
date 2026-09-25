@@ -9,5 +9,6 @@ void printint(int32_t num, uint8_t base);
 void print_addr(uint32_t addr);
 void printint(int32_t num, uint8_t base);
 void error(char *str);
+uint32_t strlen(char *str);
 
 #endif

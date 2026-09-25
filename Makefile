@@ -13,7 +13,8 @@ LDFLAGS = -T $K/kernel.ld -nostdlib -ffreestanding $(ARCH)
 
 # Source Files
 C_SRC = $K/main.c $K/uart.c $K/kprint.c $K/boot.c $K/csr.c $K/mem.c \
-        $K/vm.c $K/trap.c $K/spinlock.c $K/gpr.c $K/rv.c $K/proc.c $K/syscall.c
+        $K/vm.c $K/trap.c $K/spinlock.c $K/gpr.c $K/rv.c $K/proc.c $K/syscall.c \
+        $K/exec.c
 ASM_SRC = $K/boot_asm.S $K/kerneltrap.S $K/usertrap.S $K/usertrapret.S $K/swtch.S
 
 # Object files
@@ -23,8 +24,9 @@ OBJ = $(ASM_OBJ) $(C_OBJ)
 
 OUTPUT = kernel.elf
 INITCODE_HEADER = $K/initcode.h
+HELLOCODE_HEADER = $K/hellocode.h
 
-all: $(INITCODE_HEADER) $(OUTPUT) 
+all: $(INITCODE_HEADER) $(HELLOCODE_HEADER) $(OUTPUT)
 
 # --- KERNEL BUILD RULES ---
 
@@ -41,33 +43,37 @@ $K/%.o: $K/%.S
 
 # Explicit dependency: proc.c needs initcode.h to exist before compiling
 $K/proc.o: $(INITCODE_HEADER)
+$K/exec.o: $(HELLOCODE_HEADER)
 
 # --- USER PROGRAM BUILD RULES ---
 
-# 1. Compile init.S to an object file
-$U/init.o: $U/init.S
-	@mkdir -p $U
+# Every user/<prog>.S becomes a flat binary embedded in the kernel as
+# kernel/<prog>code.h, holding user_<prog>_bin[] and user_<prog>_bin_len.
+
+# 1. Compile the program to an object file
+$U/%.o: $U/%.S
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # 2. Link to start at 0x1000 (User Entry Point)
 # We don't use kernel.ld here; we just need the text section at 0x1000.
-$U/init.elf: $U/init.o
-	$(LD) -nostdlib $(ARCH) -Ttext 0x1000 -o $@ $<
+$U/%.elf: $U/%.o
+	$(LD) -nostdlib $(ARCH) -Ttext 0x1000 -e start -o $@ $<
 
 # 3. Strip ELF headers to create a flat binary
-$U/init.bin: $U/init.elf
+$U/%.bin: $U/%.elf
 	$(OBJCOPY) -S -O binary $< $@
 
 # 4. Convert Binary to C Header (Hex Dump)
 # Requires 'xxd' tool (standard on Linux/WSL)
-# This creates 'unsigned char user_init_bin[]' inside initcode.h
-$(INITCODE_HEADER): $U/init.bin
+$K/%code.h: $U/%.bin
 	xxd -i $< > $@
+
+.PRECIOUS: $U/%.o $U/%.elf $U/%.bin
 
 # --- CLEAN ---
 
 clean:
-	rm -f $K/*.o $(OUTPUT) $(INITCODE_HEADER) $U/*.o $U/*.elf $U/*.bin
+	rm -f $K/*.o $(OUTPUT) $(INITCODE_HEADER) $(HELLOCODE_HEADER) $U/*.o $U/*.elf $U/*.bin
 
 .PHONY: all clean run
 

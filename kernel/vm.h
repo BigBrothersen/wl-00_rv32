@@ -24,6 +24,7 @@ typedef pte_t* pagetable_t;
 #define TRAMPOLINE           (MAX_VA_ADDR - PAGE_SIZE + 1)   // store trampoline at the upper virtual address (1 page)
 #define TRAPFRAME            (TRAMPOLINE - PAGE_SIZE)  // store trapframe just under the trampoline (1 page)
 #define USER_STACK_TOP       (TRAPFRAME - PAGE_SIZE)    // user stack starts in a page just under trapframe (grows downwards)
+#define USER_TEXT            0x1000                    // flat user binaries are loaded and entered here
 
 #define MAKE_SATP(pa)   ((1u << 31) | (((pa) >> 12) & 0x003FFFFF) )
 
@@ -48,4 +49,6 @@ int uvmcopy(pagetable_t old_pt, pagetable_t new_pt, uint32_t sz);
 void freewalk(pagetable_t pt);
 void uvmunmap(pagetable_t pt, uint32_t va, uint32_t size, int free);
 void uvmfree(pagetable_t pt, uint32_t size);
+uint32_t uvmload(pagetable_t pt, const unsigned char *bin, uint32_t len);
+void *uvmstack(pagetable_t pt);
 #endif

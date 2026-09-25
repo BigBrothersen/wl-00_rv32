@@ -136,3 +136,15 @@ void* memmove(void *dst, const void *src, uint32_t n)
 
   return dst;
 }
+
+// Copy at most n-1 chars of src into dst and always NUL-terminate.
+char *safestrcpy(char *dst, const char *src, int n)
+{
+    char *d = dst;
+    if (n <= 0)
+        return dst;
+    while (--n > 0 && (*d++ = *src++) != 0)
+        ;
+    *d = 0;
+    return dst;
+}

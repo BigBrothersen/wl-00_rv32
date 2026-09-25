@@ -33,6 +33,7 @@ void *kalloc();
 void kfree(void *pa);
 void *memset(void *ptr, int value, uint32_t num);
 void* memmove(void *dst, const void *src, uint32_t n);
+char *safestrcpy(char *dst, const char *src, int n);
 int page_idx(void *pa);
 uint8_t page_empty(int i);
 
