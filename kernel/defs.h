@@ -10,6 +10,11 @@
 #define NCPU 4  // keep in sync with boot_asm.S and the stack reservation in kernel.ld
 #define NPROC 32
 
+// TIMER
+#define TIMEBASE_HZ 10000000 // rate of the time CSR: 10 MHz on QEMU virt
+#define TICK_HZ 100
+#define TIMER_INTERVAL (TIMEBASE_HZ / TICK_HZ)  // every second 100 ticks
+
 // Memory section addresses, refer to kernel.ld for more info
 
 extern char _stext[];

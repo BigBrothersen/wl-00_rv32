@@ -1,5 +1,6 @@
 #include "csr.h"
 #include "kprint.h"
+#include "defs.h"
 // #include "trap.h"
 
 void main();
@@ -19,6 +20,11 @@ void boot()
     w_mepc((uint32_t)main); // Direct to main.c
     w_pmpaddr0(0xFFFFFFFF);  // TOR top = 0xFFFFFFFF << 2: covers the whole 34-bit physical space
     w_pmpcfg0(0xF);          // A=TOR, RWX permissions for S/U modes
+
+    w_menvcfgh(r_menvcfgh() | MENVCFGH_STCE);      // turn on Sstc
+    w_mcounteren(r_mcounteren() | MCOUNTEREN_TM);  // let S-mode read time and access stimecmp
+    w_stimecmp64(r_time64() + TIMER_INTERVAL);     // ask for the first timer interrupt
+
     asm volatile ("mret");
     while(1) {
         print_string("hanging\n");

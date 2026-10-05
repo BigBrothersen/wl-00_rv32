@@ -1,6 +1,7 @@
 #include "proc.h"
 #include "kprint.h"
 #include "syscall.h"
+#include "trap.h"
 // #include "fd.h"
 
 uint32_t argraw(int n) {
@@ -139,9 +140,29 @@ uint32_t sys_kill(){
     return -1;
 }
 
+// sleep(n): put the caller to sleep for n clock ticks (n / TICK_HZ seconds),
+// using no CPU meanwhile. clockintr() calls wakeup(&ticks) every tick, so the
+// loop wakes once per tick, re-checks, and sleeps again until n have passed.
+uint32_t sys_sleep(){
+    int n;
+    argint(0, &n);
+    if (n < 0) return -1;
+
+    lock(&tickslock);
+    uint32_t start = ticks; // fixed: the moment the sleep began
+    while (ticks - start < (uint32_t)n) { // unsigned subtraction: correct across wraparound
+        sleep(&ticks, &tickslock);
+    }
+    unlock(&tickslock);
+    return 0;
+}
+
 uint32_t sys_getpid() {
     return myproc()->pid;
 }
+
+// TODO(M1 step 7, optional): sys_uptime(): return ticks, read under
+// tickslock. Handy for user programs to measure how long sleep() took.
 
 static uint32_t (*syscalls[])(void) = {
     [SYS_EXIT]    = sys_exit,
@@ -154,6 +175,7 @@ static uint32_t (*syscalls[])(void) = {
     [SYS_BRK]     = sys_brk,
     [SYS_KILL]    = sys_kill,
     [SYS_GETPID]  = sys_getpid,
+    [SYS_SLEEP]   = sys_sleep,
 };
 
 
@@ -163,7 +185,7 @@ void syscall() {
     int syscall_num = p->tf->regs[17]; // reference a7
     // printf("syscall_num a0 is %d\n", syscall_num);
 
-    if (syscall_num <= 0 || syscall_num > SYS_GETPID) {
+    if (syscall_num <= 0 || syscall_num >= NSYSCALLS || syscalls[syscall_num] == 0) {
         printf("Error: Invalid syscall %d\n", syscall_num);
         p->tf->regs[10] = -1; // set a0 as -1 for return value
         return;

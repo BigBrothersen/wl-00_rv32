@@ -9,6 +9,9 @@
 
 
 
+// TODO(M1 step 5): WAITING becomes the "asleep" state used by sleep(). Note
+// that scheduler() only ever picks READY, so a WAITING process uses no CPU
+// until wakeup() turns it back into READY. No new state is needed.
 enum procstate { UNUSED, NEW, READY, RUNNING, WAITING, ZOMBIE };
 
 
@@ -51,6 +54,12 @@ struct proc {
     uint32_t sz; // size of process
     struct trapframe_t *tf; // trapframe of process
     int xstate; // exit status, valid once state == ZOMBIE
+    // TODO(M1 step 5): add a "channel" field: a void * naming what this
+    // process is waiting for while WAITING (0 otherwise). A channel is just an
+    // address both sides agree on, e.g. &ticks for "time passed", or a parent
+    // proc's address for "one of my children exited". Nothing is stored there.
+    // Like state, it is read and written only while holding p->lock.
+    void *chan;
 
     struct spinlock lock;
     struct context context;
@@ -61,6 +70,7 @@ struct proc {
 extern struct cpu cpus[NCPU];
 extern struct proc proctable[NPROC];
 
+int cpu_id();
 struct proc *procalloc();
 struct cpu *this_cpu();
 struct proc *myproc();
@@ -72,6 +82,10 @@ void scheduler();
 void forkret();
 void sched();
 void yield();
+// TODO(M1 step 5): declare sleep(void *chan, struct spinlock *lk) and
+// wakeup(void *chan) here.
+void sleep(void *chan, struct spinlock *lk);
+void wakeup(void *chan);
 void releaseproc(struct proc *p);
 
 int fork();

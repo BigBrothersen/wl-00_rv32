@@ -12,9 +12,33 @@ struct cpu cpus[NCPU];
 struct proc proctable[NPROC];
 int curr_pid = 1;
 struct spinlock pid_lock;
+// TODO(M1 step 6): add a global spinlock wait_lock.
+//  What it protects: every proc's parent pointer, and the "go to sleep in
+//  wait() / wake the parent in kexit()" handshake.
+//  Rule: write q->parent only while holding BOTH wait_lock and q->lock
+//  (then a reader holding either one sees a consistent value).
+//  Lock order, always: wait_lock -> p->lock -> mem_lock / print_lock.
+//  Never take wait_lock while already holding any p->lock: that is the
+//  reverse order and can deadlock against a hart doing it the right way.
+struct spinlock wait_lock;
+
+int cpu_id() {
+    int id = r_tp();
+    return id; 
+}
+
 
 // Must be called with interrupts disabled, or the caller could be moved to
 // another CPU between reading tp and using the result.
+// TODO(M1 step 4): concept check, no code change expected. With syscalls
+// preemptible, a process can now be moved to another hart at almost any line
+// of syscall code. Any this_cpu() / cpu_id() / r_tp() result used with
+// interrupts ON could name the hart you were on a moment ago.
+//  - Go through every caller (grep this_cpu, cpu_id, r_tp) and convince
+//    yourself each one runs with interrupts off: inside a held lock, in
+//    interrupt context, or after interrupt_off().
+//  - Then answer: why is myproc() safe with interrupts on, even though it
+//    calls this_cpu() inside?
 struct cpu *this_cpu() {
     int id = r_tp();
     return &cpus[id];
@@ -32,6 +56,8 @@ struct proc *myproc() {
 void init_proctable() {
     struct proc *p;
     init_lock(&pid_lock, "pid");
+    // TODO(M1 step 6): initialise wait_lock here (hart 0, once, like pid_lock).
+    init_lock(&wait_lock, "wait");
     for (p = proctable; p < &proctable[NPROC]; p++) {
         init_lock(&p->lock, "proc");
         p->kstack = 0;
@@ -152,6 +178,9 @@ void releaseproc(struct proc *p)
     p->tf = NULL;
     p->parent = NULL;
     p->xstate = 0;
+    // TODO(M1 step 5): also reset the new channel field to 0, so a reused
+    // slot never starts with a stale channel.
+    p->chan = NULL;
     memset(&p->context, 0, sizeof(p->context));
     p->state = UNUSED; // last: procalloc() may claim the slot as soon as it sees this
 }
@@ -288,13 +317,20 @@ void scheduler()
                 // Nobody will ever wait() for a zombie without a parent (e.g.
                 // init itself, or an orphan with no init to adopt it), so reap
                 // it here: we are on the scheduler stack, not its kstack.
+                // TODO(M1 step 6): no code change, concept check. This reads
+                // p->parent holding only p->lock, not wait_lock. Why is that
+                // still safe once the step 6 rule is in place? (Who writes
+                // parent, and which locks must they hold?) Also: why must the
+                // scheduler NOT take wait_lock here? (Hint: lock order.)
                 if (p->state == ZOMBIE && p->parent == NULL)
                     releaseproc(p);
             }
             // release lock (taken by the process in sched())
             unlock(&p->lock);
         }
-        // TODO(M1): without a timer, an idle hart sleeps here until an interrupt arrives.
+        // Nothing was runnable: sleep until the next interrupt. Each hart's timer
+        // wakes it every tick, and the pending interrupt is then taken in the
+        // interrupt_on() window at the top of the loop.
         if(!run) asm volatile("wfi");
     }
 }
@@ -320,9 +356,11 @@ void sched()
     this_cpu()->intena = intena; // may resume on a different CPU than it left
 }
 
-// Give up the CPU for one scheduling round without changing our own state
-// beyond READY. Used by wait() to poll for a zombie child since this
-// kernel has no sleep()/wakeup() channel mechanism yet.
+// Give up the CPU for one scheduling round: mark ourselves READY and switch to
+// the scheduler. Used for preemption on timer ticks.
+// p->lock is taken before setting READY so no other hart can pick this process
+// up while we are still running on its kernel stack; the scheduler releases it
+// once swtch() has left that stack.
 void yield()
 {
     struct proc *p = myproc();
@@ -330,6 +368,60 @@ void yield()
     p->state = READY;
     sched();
     unlock(&p->lock);
+}
+
+// TODO(M1 step 5): write sleep(void *chan, struct spinlock *lk).
+//  Purpose: block the current process until someone calls wakeup(chan),
+//  using no CPU meanwhile (unlike yield(), which stays READY).
+//  Contract: the caller holds lk, the lock that protects the condition it is
+//  waiting for (e.g. tickslock for "ticks advanced"). sleep() returns with lk
+//  held again. Callers always use it in a loop, re-checking the condition:
+//      lock(lk); while (!condition) sleep(chan, lk); ... unlock(lk);
+//  Procedure:
+//   1. Get the current process.
+//   2. Take p->lock, and only THEN release lk. This order is the whole trick:
+//      wakeup() needs p->lock to look at us, so it cannot run in the gap
+//      between "caller checked the condition" and "we are marked WAITING".
+//      Swap the order and a wakeup in that gap is lost: we sleep forever.
+//   3. Record the channel, set state to WAITING, and call sched().
+//      (sched() demands exactly one lock held, which is now p->lock.)
+//   4. When we run again (someone woke us and the scheduler picked us):
+//      clear the channel, release p->lock, then re-take lk before returning.
+//  Think about: why must callers re-check the condition after waking, instead
+//  of assuming it is now true? (Several processes may sleep on one channel.)
+//  Pitfall: never pass &p->lock itself as lk.
+void sleep(void *chan, struct spinlock *lk) {
+    struct proc *p = myproc();
+    lock(&p->lock);
+    unlock(lk);
+    p->chan = chan;
+    p->state = WAITING;
+    sched();
+    p->chan = NULL;
+    unlock(&p->lock);
+    lock(lk);
+}
+
+// TODO(M1 step 5): write wakeup(void *chan).
+//  Purpose: make every process sleeping on chan runnable again.
+//  Procedure: go through the whole proctable; for each process, take its
+//  lock, and if it is WAITING on this chan, set it to READY; release the lock.
+//  Notes:
+//   - Skip the calling process itself: it is not asleep, and if the caller
+//     happened to hold its own p->lock, locking it again would panic.
+//   - Waking a process that nobody waits for, or calling wakeup() when no one
+//     sleeps on chan, is harmless; it just finds nothing to do.
+//   - The caller normally holds the condition's lock (lk) while calling this,
+//     having just changed the condition. Lock order is then always
+//     lk -> p->lock, in both sleep() and wakeup(), so they cannot deadlock.
+void wakeup(void *chan) {
+    for (struct proc *q = proctable; q < &proctable[NPROC]; q++) {
+        lock(&q->lock);
+        if (q->chan == chan && q->state == WAITING) {
+            q->state = READY;
+        }
+        unlock(&q->lock);
+    }
 }
 
 void forkret()
@@ -362,10 +454,15 @@ int fork() {
     memmove(np->name, p->name, sizeof(p->name));
 
     int pid = np->pid; // np may run, exit and be reaped once READY
+    // TODO(M1 step 6): follow the parent rule here too: hold wait_lock as
+    // well as np->lock while setting np->parent (wait_lock first, then
+    // np->lock). Setting state = READY can stay under np->lock alone.
+    lock(&wait_lock);
     lock(&np->lock);
     np->parent = p;
     np->state = READY;
     unlock(&np->lock);
+    unlock(&wait_lock);
 
     return pid;
 }
@@ -377,6 +474,20 @@ int wait(uint32_t addr)
 {
     struct proc *p = myproc();
 
+    // TODO(M1 step 6): sleep instead of polling with yield().
+    //  Today a waiting parent stays READY and gets scheduled every round just
+    //  to re-scan and yield again: it burns CPU doing nothing. Instead:
+    //  1. Take wait_lock once, before the for (;;) loop. Holding it makes the
+    //     q->parent checks reliable and is the lk that sleep() needs.
+    //  2. Keep the scan as it is (q->lock around the ZOMBIE check and reaping).
+    //  3. Every return path must release wait_lock first: the reaped-a-child
+    //     return, the copyout-failed return, and the no-children return.
+    //  4. Replace yield() with sleep(p, &wait_lock). The channel is the
+    //     parent's own proc address: that is what kexit() will wake.
+    //  Think about: the condition here is "one of my children is a ZOMBIE".
+    //  Which lock protects it, so that a child cannot become a zombie and
+    //  call wakeup() in the gap between our scan and our sleep()?
+    lock(&wait_lock);
     for (;;) {
         int have_children = 0;
 
@@ -392,20 +503,26 @@ int wait(uint32_t addr)
 
                 if (addr != 0 && copyout(p->pt, addr, (char *)&xstate, sizeof(xstate)) < 0) {
                     unlock(&q->lock);
+                    unlock(&wait_lock);
                     return -1;
                 }
 
                 releaseproc(q);
                 unlock(&q->lock);
+                unlock(&wait_lock);
                 return pid;
             }
             unlock(&q->lock);
         }
 
-        if (!have_children)
+        if (!have_children) {
+            unlock(&wait_lock);
             return -1;
+        }
 
-        yield();
+        // No zombie child yet: sleep until a child's kexit() wakes us.
+        // sleep() releases wait_lock while asleep and re-takes it on return.
+        sleep(p, &wait_lock);
     }
 }
 
@@ -416,6 +533,32 @@ void kexit(int status)
 {
     struct proc *p = myproc();
 
+    // TODO(M1 step 6): wake the parent instead of letting it poll.
+    //  New order of work in kexit():
+    //  1. Free the address space (uvmfree) FIRST, before taking any lock: it
+    //     needs no lock and can take a while. Move that block up here.
+    //  2. Take wait_lock. Do the reparenting loops (unchanged) while holding
+    //     it, so the parent writes follow the rule (wait_lock + q->lock).
+    //  3. If you handed any child that is already a ZOMBIE to the reaper
+    //     (pid 1), wakeup(reaper): it may be asleep in wait() and must reap it.
+    //  4. If we have a parent, wakeup(p->parent): it may be asleep in wait().
+    //  5. lock(&p->lock), set xstate and ZOMBIE (as today).
+    //  6. Release wait_lock, then sched().
+    //  Think about:
+    //  - Step 4 wakes the parent BEFORE we are a ZOMBIE. Why is that fine?
+    //    (What must the parent take before it can re-scan, and when do we
+    //    release it?)
+    //  - Why must wait_lock be released before sched()? (What does sched()
+    //    check about how many locks are held?)
+
+    // Tear down the address space first; it needs no lock. By this point satp
+    // is already the kernel page table (usertrap.S switched it before we got
+    // here), so p->pt is no longer in use by hardware and is safe to free.
+    uvmfree(p->pt, p->sz);
+    p->pt = NULL;
+
+    lock(&wait_lock);
+
     // Reparent any children we leave behind to pid 1, if it still exists
     // and isn't us. Otherwise they're simply orphaned (no init yet).
     struct proc *reaper = NULL;
@@ -425,27 +568,36 @@ void kexit(int status)
             break;
         }
     }
+    int gave_zombie = 0; // handed the reaper a child that is already a zombie
     for (struct proc *q = proctable; q < &proctable[NPROC]; q++) {
         if (q->parent == p) {
             lock(&q->lock);
             q->parent = reaper;
-            // A zombie orphan will never be scheduled again, so the
-            // scheduler can't reap it: do it now.
-            if (reaper == NULL && q->state == ZOMBIE)
-                releaseproc(q);
+            if (q->state == ZOMBIE) {
+                // A zombie orphan will never be scheduled again, so the
+                // scheduler can't reap it: do it now.
+                if (reaper == NULL)
+                    releaseproc(q);
+                else
+                    gave_zombie = 1;
+            }
             unlock(&q->lock);
         }
     }
+    // The reaper may be asleep in wait(): it must come and reap that zombie.
+    if (gave_zombie)
+        wakeup(reaper);
 
-    // Tear down the address space now: by this point satp is already the
-    // kernel page table (usertrap.S switched it before we got here), so
-    // p->pt is no longer in use by hardware and is safe to free.
-    uvmfree(p->pt, p->sz);
-    p->pt = NULL;
+    // Our parent may be asleep in wait(). Waking it before we are a ZOMBIE is
+    // fine: it can't re-scan until it gets wait_lock, which we hold until
+    // after the state change below.
+    if (p->parent)
+        wakeup(p->parent);
 
     lock(&p->lock);
     p->xstate = status;
     p->state = ZOMBIE;
+    unlock(&wait_lock); // sched() requires p->lock to be the only lock held
     sched(); // never returns
     panic("kexit: zombie returned");
 }

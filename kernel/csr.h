@@ -21,6 +21,10 @@
 #define SIE_STIE (1L << 5) // timer
 #define SIE_SSIE (1L << 1) // software
 
+// Machine-mode Interrupt Enable
+#define MENVCFGH_STCE (1u << 31) // Sstc enable. It is bit 63 of menvcfg, i.e. bit 31 of menvcfgh on RV32
+#define MCOUNTEREN_TM (1u << 1)  // lets S-mode read time (and, with Sstc, access stimecmp)
+
 // Machine Information Registers
 uint32_t r_mvendorid();
 uint32_t r_marchid();
@@ -84,6 +88,24 @@ uint32_t r_pmpaddr0();
 
 void w_tp(uint32_t x);
 uint32_t r_tp();
+
+// Physical Timer Settings
+void w_menvcfg(uint32_t x);
+uint32_t r_menvcfg();
+void w_menvcfgh(uint32_t x);
+uint32_t r_menvcfgh();
+void w_mcounteren(uint32_t x);
+uint32_t r_mcounteren();
+uint32_t r_time();
+uint32_t r_timeh();
+uint32_t r_stimecmp();
+void w_stimecmp(uint32_t x);
+uint32_t r_stimecmph();
+void w_stimecmph(uint32_t x);
+
+// 64-bit timer values, built from the 32-bit halves above
+uint64_t r_time64();
+void w_stimecmp64(uint64_t x);
 
 // Additional useful macros
 #define CSR_MACHINE 0

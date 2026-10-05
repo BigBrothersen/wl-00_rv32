@@ -28,7 +28,11 @@ typedef enum {
     SYS_WRITE,
     SYS_BRK,
     SYS_KILL,
-    SYS_GETPID  // Designate SYS_GETPID as the last sysnum
+    SYS_GETPID,
+    SYS_SLEEP,  // 11
+    // Syscall numbers are what user programs put in a7: only ever append new
+    // ones above this line, never insert, or existing numbers shift.
+    NSYSCALLS   // not a syscall: always last syscall + 1, used for range checks
 } sysnums;
 
 #endif

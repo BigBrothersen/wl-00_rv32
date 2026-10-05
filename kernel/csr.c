@@ -87,6 +87,105 @@ uint32_t r_mtvec() {
     return x;
 }
 
+void w_menvcfg(uint32_t x)
+{
+    asm volatile("csrw menvcfg, %0" : : "r" (x));
+}
+
+uint32_t r_menvcfg() {
+    uint32_t x;
+    asm volatile("csrr %0, menvcfg" : "=r" (x) );
+    return x;
+}
+
+void w_menvcfgh(uint32_t x)
+{
+    asm volatile("csrw menvcfgh, %0" : : "r" (x));
+}
+
+uint32_t r_menvcfgh() {
+    uint32_t x;
+    asm volatile("csrr %0, menvcfgh" : "=r" (x) );
+    return x;
+}
+
+void w_mcounteren(uint32_t x)
+{
+    asm volatile("csrw mcounteren, %0" : : "r" (x));
+}
+
+uint32_t r_mcounteren()
+{
+    uint32_t x;
+    asm volatile("csrr %0, mcounteren" : "=r" (x) );
+    return x;
+}
+
+// Supervisor Timer Comparison Register
+uint32_t r_stimecmp()
+{
+    uint32_t x;
+    asm volatile("csrr %0, stimecmp" : "=r" (x) );
+    return x;
+}
+
+void w_stimecmp(uint32_t x)
+{
+    asm volatile("csrw stimecmp, %0" : : "r" (x));
+}
+
+uint32_t r_stimecmph()
+{
+    uint32_t x;
+    asm volatile("csrr %0, stimecmph" : "=r" (x) );
+    return x;
+}
+
+void w_stimecmph(uint32_t x)
+{
+    asm volatile("csrw stimecmph, %0" : : "r" (x));
+}
+
+// Current time, low and high 32 bits
+uint32_t r_time()
+{
+    uint32_t x;
+    asm volatile("csrr %0, time" : "=r" (x) );
+    return x;
+}
+
+uint32_t r_timeh()
+{
+    uint32_t x;
+    asm volatile("csrr %0, timeh" : "=r" (x) );
+    return x;
+}
+
+// Read the 64-bit time. time keeps counting between the two reads, so if the
+// low half carried into the high half in between, the halves don't belong
+// together: read high, low, high again and retry until both highs match.
+uint64_t r_time64()
+{
+    uint32_t hi, lo, hi2;
+    do {
+        hi = r_timeh();
+        lo = r_time();
+        hi2 = r_timeh();
+    } while (hi != hi2);
+    return ((uint64_t)hi << 32) | lo;
+}
+
+// Write the 64-bit compare value. The hardware compares continuously, so a
+// half-written value is live. Parking the low half at its maximum first means
+// the in-between value is never smaller than both the old and the new one,
+// so it can't raise a false timer interrupt.
+void w_stimecmp64(uint64_t x)
+{
+    w_stimecmp(0xFFFFFFFF);             // Park the lower register
+    w_stimecmph((uint32_t)(x >> 32));   // Write upper 32 bits
+    w_stimecmp((uint32_t)x);            // Write lower 32 bits
+}
+
 // Machine Trap Handling
 uint32_t r_mscratch() {
     uint32_t x;
@@ -255,7 +354,5 @@ uint32_t r_tp() {
     asm volatile("mv %0, tp" : "=r" (x));
     return x;
 }
-
-// 
 
 // Add more PMP registers as needed (pmpcfg1-3, pmpaddr1-15)

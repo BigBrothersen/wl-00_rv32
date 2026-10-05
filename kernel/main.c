@@ -23,6 +23,7 @@ void main() {
         init_bitmap();
         init_kptable();
         init_kvmhart();
+        init_clock();
         init_trap();
         init_proctable();
         init_userproc();

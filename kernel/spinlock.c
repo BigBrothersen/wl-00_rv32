@@ -33,6 +33,14 @@ void push_off() {
     curr_cpu->depth++;
 }
 
+// TODO(M1 step 4): no code change, concept check. Until now every lock()
+// happened with interrupts already off, so intena was always 0 and the
+// interrupt_on() below never ran. Once syscalls run with interrupts on, a
+// lock() inside a syscall records intena = 1, and the final unlock() turns
+// interrupts back on. Trace it for a nested case:
+//   lock(A); lock(B); unlock(B); unlock(A);
+// At which call do interrupts go off, and at which do they come back on?
+// Why would turning them on at unlock(B) be a bug?
 void pop_off() {
     struct cpu *curr_cpu = this_cpu();
     if (is_interrupt())
