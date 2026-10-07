@@ -7,6 +7,7 @@
 #include "rv.h"
 #include "uart.h"
 #include "initcode.h"
+#include "exec.h"
 
 struct cpu cpus[NCPU];
 struct proc proctable[NPROC];
@@ -169,18 +170,24 @@ void uvmfirst(struct proc *p, uint32_t sepc, uint32_t sp)
     lock(&p->lock);
 
     // Copy the user program in, one page at a time
-    uint32_t va;
-    for (va = 0; va < user_init_bin_len; va += PAGE_SIZE) {
-        void *user_pa = kalloc();
-        if (user_pa == 0)
-            panic("uvmfirst: out of memory");
-        uint32_t n = user_init_bin_len - va;
-        if (n > PAGE_SIZE)
-            n = PAGE_SIZE;
-        memmove(user_pa, user_init_bin + va, n);
-        if (mappage(p->pt, sepc + va, (uint32_t)user_pa, PTE_R | PTE_X | PTE_U | PTE_V) == 0)
-            panic("uvmfirst: mappage");
-    }
+    // uint32_t va;
+    // for (va = 0; va < user_init_bin_len; va += PAGE_SIZE) {
+    //     void *user_pa = kalloc();
+    //     if (user_pa == 0)
+    //         panic("uvmfirst: out of memory");
+    //     uint32_t n = user_init_bin_len - va;
+    //     if (n > PAGE_SIZE)
+    //         n = PAGE_SIZE;
+    //     memmove(user_pa, user_init_bin + va, n);
+    //     if (mappage(p->pt, sepc + va, (uint32_t)user_pa, PTE_R | PTE_X | PTE_U | PTE_V) == 0)
+    //         panic("uvmfirst: mappage");
+    // }
+
+    // Load init's code and data from its embedded ELF image
+    uint32_t entry, sz;
+    if (load_elf(p->pt, user_init_elf, user_init_elf_len, &entry, &sz) < 0)
+        panic("uvmfirst: cannot load init ELF");
+
 
     // // Map user stack
     void *stack_pa = kalloc();
@@ -190,14 +197,14 @@ void uvmfirst(struct proc *p, uint32_t sepc, uint32_t sp)
         panic("uvmfirst: mappage");
 
     // Load trapframe data to process
-    p->tf->epc = sepc;
+    p->tf->epc = entry; // the ELF entry point
     p->tf->regs[2] = sp; // x2 = user sp
     p->tf->k_sp = p->kstack + PAGE_SIZE;
     p->tf->k_satp = (uint32_t)MAKE_SATP((uint32_t)kptable);
     p->tf->k_trap = (uint32_t)kerneltrap;
     p->tf->u_trap = (uint32_t)u_trap_handle;
 
-    p->sz = sepc + PGROUNDUP(user_init_bin_len); // end va of the user image
+    p->sz = sz; // end va of the user image, from load_elf
     memmove(p->name, "init", 5);
     p->state = READY;
     unlock(&p->lock);

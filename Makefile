@@ -17,7 +17,7 @@ LDFLAGS = -T $K/kernel.ld -nostdlib -ffreestanding $(ARCH) -Wl,--no-warn-rwx-seg
 
 # Source Files
 C_SRC = $K/main.c $K/uart.c $K/kprint.c $K/boot.c $K/csr.c $K/mem.c \
-        $K/vm.c $K/trap.c $K/spinlock.c $K/gpr.c $K/rv.c $K/proc.c $K/syscall.c
+        $K/vm.c $K/trap.c $K/spinlock.c $K/gpr.c $K/rv.c $K/proc.c $K/syscall.c $K/exec.c
 ASM_SRC = $K/boot_asm.S $K/kerneltrap.S $K/usertrap.S $K/usertrapret.S $K/swtch.S
 
 # Object files
@@ -58,8 +58,8 @@ $U/init.o: $U/init.S
 
 # 2. Link to start at 0x1000 (User Entry Point)
 # We don't use kernel.ld here; we just need the text section at 0x1000.
-$U/init.elf: $U/init.o
-	$(LD) -nostdlib $(ARCH) -Ttext 0x1000 -e start -o $@ $<
+$U/init.elf: $U/init.o $U/user.ld
+	$(LD) -nostdlib $(ARCH) -T $U/user.ld -o $@ $<
 
 # 3. Strip ELF headers to create a flat binary
 $U/init.bin: $U/init.elf
@@ -68,8 +68,9 @@ $U/init.bin: $U/init.elf
 # 4. Convert Binary to C Header (Hex Dump)
 # Requires 'xxd' tool (standard on Linux/WSL)
 # This creates 'unsigned char user_init_bin[]' inside initcode.h
-$(INITCODE_HEADER): $U/init.bin
-	xxd -i $< > $@
+$(INITCODE_HEADER): $U/init.bin $U/init.elf
+	xxd -i $U/init.bin > $@
+	xxd -i $U/init.elf >> $@
 
 # --- RUN ---
 

@@ -47,4 +47,6 @@ int uvmcopy(pagetable_t old_pt, pagetable_t new_pt, uint32_t sz);
 void freewalk(pagetable_t pt);
 void uvmunmap(pagetable_t pt, uint32_t va, uint32_t size, int free);
 void uvmfree(pagetable_t pt, uint32_t size);
+uint32_t uvmalloc(pagetable_t pt, uint32_t oldsz, uint32_t newsz, int xperm);
+int copyinstr(pagetable_t pt, char *dst, uint32_t src_va, uint32_t max);
 #endif

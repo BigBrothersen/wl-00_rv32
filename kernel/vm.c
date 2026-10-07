@@ -220,6 +220,46 @@ int copyout(pagetable_t pt, uint32_t dst_va, char *src, uint32_t len)
     return 0;
 }
 
+// Copy a NUL-terminated string from user virtual address src_va into kernel
+// buffer dst, page by page, copying at most max bytes including the NUL.
+// In principle similar to copyin, except it stops at the NUL.
+// Returns 0 on success, -1 if a page is not user-readable or no NUL was
+// found within max bytes.
+int copyinstr(pagetable_t pt, char *dst, uint32_t src_va, uint32_t max) {
+    int null = 0;
+    while (!null && max > 0) {
+        uint32_t src_pa = find_user_pa(pt, src_va, PTE_R);
+        if (src_pa == 0)
+            return -1;
+        uint32_t offset = src_pa % PAGE_SIZE;
+        uint32_t n = PAGE_SIZE - offset;
+        if (n > max)
+            n = max;
+        src_va += n; // next pass starts on the next page (the loop below counts n down)
+        char *p = (char *)(src_pa);
+        while (n > 0) {
+            if (*p == '\0') {
+                *dst = '\0';
+                null = 1;
+                break;
+            }
+            else {
+                *dst = *p;
+            }
+            n--;
+            max--;
+            p++;
+            dst++;
+        }
+    }
+    if (null) {
+        return 0;
+    }
+    else {
+        return -1;
+    }
+}
+
 // unmap inside pt, va is start address up to size
 void uvmunmap(pagetable_t pt, uint32_t va, uint32_t size, int free) {
     if (va % PAGE_SIZE != 0 || size % PAGE_SIZE != 0) {
@@ -264,4 +304,30 @@ void freewalk(pagetable_t pt) {
         }
     }
     kfree((void *)pt);
+}
+
+// Grow a user address space from oldsz to newsz by mapping zeroed pages with
+// permissions PTE_R | PTE_U | xperm. Returns newsz on success, 0 on failure
+// (after freeing every page this call mapped, so nothing leaks).
+// The caller must keep newsz inside the user range: mappage() panics on a remap.
+uint32_t uvmalloc(pagetable_t pt, uint32_t oldsz, uint32_t newsz, int xperm) {
+    if (oldsz > newsz) return oldsz;
+
+    char *mem;
+    uint32_t start = PGROUNDUP(oldsz);
+
+    for (uint32_t curr = start; curr < newsz; curr += PAGE_SIZE) {
+        mem = kalloc();
+        if (mem == NULL) {
+            uvmunmap(pt, start, curr - start, 1); // undo the pages mapped so far
+            return 0;
+        }
+        memset(mem, 0, PAGE_SIZE);
+        if (mappages(pt, curr, (uint32_t)mem, PAGE_SIZE, PTE_R | PTE_U | xperm) != 0) {
+            kfree(mem);
+            uvmunmap(pt, start, curr - start, 1);
+            return 0;
+        }
+    }
+    return newsz;
 }
