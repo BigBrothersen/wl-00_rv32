@@ -6,8 +6,6 @@
 #include "rv.h"
 #include "csr.h"
 
-// TODO: migrate print functions to user space
-
 const char *digits = "0123456789abcdef";
 
 int hang = 0;
@@ -60,7 +58,6 @@ void print_addr(uint32_t addr)
     }
 }
 
-// TODO: implement printint. will expand to different base and size later
 void print_uint(uint32_t num, uint8_t base) 
 {
     char nums[32]; // enough for a 32-bit number in base 2
@@ -104,8 +101,7 @@ void printint(int32_t num, uint8_t base)
     }
 }
 
-// TODO: implement printf for booting message and debugging
-// TODO: add error handling for each format specifier
+
 void printf(char *fmt, ...)
 {
     if (!hang)

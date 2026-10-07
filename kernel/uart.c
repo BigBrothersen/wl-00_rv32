@@ -3,6 +3,16 @@
 
 #define UART_REG(r) ((volatile uint8_t *)(UART_0 + (r)))
 
+// void uart_init()
+// {
+//     // set baud rate (assume 115200 baudrate)
+//     // divisor = freq/baud rate
+//     *(volatile uint32_t *)(UART_0 + UART_DIV) = 434;
+//     *(volatile uint32_t *)(UART_0 + UART_IE) = 0x0; // disable interrupt
+//     return;
+// }
+
+
 void uart_init()
 {
     *UART_REG(UART_IER) = 0x00; // disable interrupts while configuring

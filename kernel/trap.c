@@ -32,22 +32,11 @@ void clockintr() {
     if(cpu_id() == 0) {
         lock(&tickslock);
         ticks++;
-        // TODO(M1 step 5): call wakeup(&ticks) here, while still holding
-        // tickslock, so processes sleeping on &ticks re-check the time.
-        // Safe from interrupt context: this hart holds no p->lock (interrupts
-        // are off whenever a lock is held), and the order tickslock -> p->lock
-        // matches what sleep(&ticks, &tickslock) does.
-        // Test for step 5 on its own: nothing sleeps yet, but this call runs
-        // 100 times a second and takes every p->lock, so the normal tests at
-        // CPUS=1/4/8 passing with no panic shows wakeup() and its locking work.
         wakeup(&ticks);
         unlock(&tickslock);
     }
 }
 
-// Handle an interrupt (call only when scause has the interrupt bit set).
-// Returns 0 if it was not recognised, 1 for a software interrupt,
-// 2 for a timer tick (the caller then yields), 3 for an external interrupt.
 static int devintr(uint32_t scause)
 {
     uint32_t code = scause & 0x7FFFFFFF;
@@ -128,21 +117,6 @@ void u_trap_handle(uint32_t scause, uint32_t sepc) {
     }
     else if (scause == SCAUSE_USER_ECALL) {
         p->tf->epc += 4;
-        // TODO(M1 step 4): run the syscall with interrupts ON.
-        //  Why: the trap entry turned interrupts off, so today a long syscall
-        //  blocks this hart's timer tick (and preemption) until it returns.
-        //  1. Turn interrupts on right here: after epc += 4, before syscall().
-        //     Only on this ecall path, never for the interrupt or fault branches.
-        //  2. Check the three preconditions hold at this point, and be able to
-        //     say why each one matters:
-        //     - stvec already points at kerneltrap (usertrap.S line 58), so a
-        //       tick during the syscall goes to s_trap_handle, not usertrap;
-        //     - everything the hardware will overwrite on the next trap
-        //       (sepc, scause) was already saved: epc in p->tf, scause in a
-        //       function argument;
-        //     - no locks are held here.
-        //  3. Nothing is needed to turn them off again: utrapret() does that
-        //     first thing. Why must it, before it switches stvec to usertrap?
         interrupt_on();
         syscall();  // handle the syscall
     }
@@ -190,25 +164,6 @@ void s_trap_handle(uint32_t scause, uint32_t sepc) {
         printf("stval:  %p (Bad Address)\n", r_stval());
         panic("unhandled exception in kernel");
     }
-
-    // TODO(M1 step 4): no code change here, but once syscalls run with
-    // interrupts on, this yield fires for real: a tick lands in the middle of
-    // a syscall and the process is switched out with half a syscall done.
-    // Be able to explain:
-    //  - which stack this handler runs on (kerneltrap.S pushes onto the
-    //    current sp: the process's 4 KB kernel stack, below the syscall's own
-    //    frames). What does that imply for big local arrays in sys_* code?
-    //  - why it is fine if the rest of the syscall finishes on another hart
-    //    (hint: what does kerneltrap.S deliberately NOT restore, and why?);
-    //  - why the sstatus saved at the top makes the final sret re-enable
-    //    interrupts, so the syscall continues interruptible.
-    // Test idea: in gdb, `break` on the yield line below, run a user loop of
-    // cheap syscalls (e.g. getpid) with CPUS=1, and check it gets hit.
-
-    // Timer tick that interrupted a running process: preempt it. Ticks taken
-    // inside scheduler() have no process on this hart, so they never yield.
-    // This must come before the restore below: while we are switched out,
-    // other traps on this hart overwrite sepc and sstatus.
     if (dev == 2 && p != NULL && p->state == RUNNING)
         yield();
 

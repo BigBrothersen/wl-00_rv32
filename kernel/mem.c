@@ -6,7 +6,7 @@
 // Kernel file for memory management
 // Allocates physical memory
 
-// Bitmap of available physical memories in form of pages. 1 is available, 0 is occupied page.
+// Bitmap of available physical memories in form of pages. 1 is available, 0 is occupied page. (HIGHLIGHT THIS IN README)
 static uint8_t mem_bitmap[NUM_PAGES];
 static char *start_page;
 static struct spinlock mem_lock; // guards mem_bitmap; every hart allocates
@@ -130,7 +130,6 @@ void *memcpy(void *dst, const void *src, uint32_t n)
     return memmove(dst, src, n);
 }
 
-// TODO: change later so no plagiarism
 void* memmove(void *dst, const void *src, uint32_t n)
 {
   const char *s;

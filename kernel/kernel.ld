@@ -20,7 +20,7 @@ SECTIONS
 {
     . = 0x80000000;
 
-    _stext = .;
+    _stext = .;     /* _stext starts at 0x80000000*/
     .text : {
         *(.text.entry)      /* _entry must be the first instruction at 0x80000000 */
         *(.text .text.*)
@@ -31,7 +31,7 @@ SECTIONS
         ASSERT(. - _trampoline == 0x1000, "Error: trampoline larger than one page");
     }
 
-    _etext = .;
+    _etext = .;     /* marks the end of the OS text*/
 
     .rodata : {
         *(.srodata .srodata.*)

@@ -5,7 +5,7 @@
 .global _entry
 _entry:
     # stack size = 4096B
-    csrr a0, mhartid // Get hardware id
+    csrr a0, mhartid // Get hardware id (First instruction executed)
 
     # Harts beyond NCPU have no stack or struct cpu reserved for them: park them.
     li t0, NCPU
