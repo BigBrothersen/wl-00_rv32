@@ -1,6 +1,7 @@
 #include "proc.h"
 #include "kprint.h"
 #include "syscall.h"
+#include "sysnum.h"
 #include "trap.h"
 #include "exec.h"
 // #include "fd.h"

@@ -5,34 +5,4 @@
 // Functions
 void syscall();
 
-// Define
-#define SYS_MAXLIMIT 10
-// #define SYS_EXIT 1
-// #define SYS_OPEN 2
-// #define SYS_WAIT 3
-// #define SYS_EXEC 4
-// #define SYS_FORK 5
-// #define SYS_READ 6
-// #define SYS_WRITE 7
-// #define SYS_BRK 8
-// #define SYS_KILL 9
-// #define SYS_GETPID 10
-
-typedef enum {
-    SYS_EXIT = 1,
-    SYS_OPEN,
-    SYS_WAIT,
-    SYS_EXEC,
-    SYS_FORK,
-    SYS_READ,
-    SYS_WRITE,
-    SYS_BRK,
-    SYS_KILL,
-    SYS_GETPID,
-    SYS_SLEEP,  // 11
-    // Syscall numbers are what user programs put in a7: only ever append new
-    // ones above this line, never insert, or existing numbers shift.
-    NSYSCALLS   // not a syscall: always last syscall + 1, used for range checks
-} sysnums;
-
 #endif

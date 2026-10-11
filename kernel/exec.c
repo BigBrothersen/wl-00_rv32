@@ -21,6 +21,7 @@ struct program {
 static const struct program programs[] = {
     { "init",  user_init_elf,  sizeof(user_init_elf)  },
     { "hello", user_hello_elf, sizeof(user_hello_elf) },
+    { "echo",  user_echo_elf,  sizeof(user_echo_elf)  },
 };
 
 // Find the embedded program called name. On success points *img at its ELF

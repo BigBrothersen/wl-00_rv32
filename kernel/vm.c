@@ -5,7 +5,6 @@
 #include "csr.h"
 #include "vm.h"
 #include "proc.h"
-#include "syscall.h"
 
 #include "kprint.h"
 
