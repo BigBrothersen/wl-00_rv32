@@ -75,6 +75,8 @@ void sleep(void *chan, struct spinlock *lk);
 void wakeup(void *chan);
 void releaseproc(struct proc *p);
 
+pagetable_t init_userpt(); // also used by kexec
+
 int fork();
 int wait(uint32_t addr);
 void kexit(int status) __attribute__((noreturn));

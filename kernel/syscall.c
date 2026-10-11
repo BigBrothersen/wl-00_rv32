@@ -2,6 +2,7 @@
 #include "kprint.h"
 #include "syscall.h"
 #include "trap.h"
+#include "exec.h"
 // #include "fd.h"
 
 uint32_t argraw(int n) {
@@ -50,9 +51,50 @@ uint32_t sys_wait() {
     return wait(addr);
 }
 
-// TODO
+// exec(path, argv): a0 = user address of the program's name, a1 = user address
+// of a 0-terminated array of user string addresses (or 0 for no arguments).
+// Everything is copied into the kernel first: those addresses only mean
+// something through the caller's page table, which kexec frees. Returns -1 to
+// the caller on failure; on success the caller is gone and the new program
+// starts with a0 = argc, a1 = argv.
 uint32_t sys_exec() {
-    return -1; // not implemented yet
+    struct proc *p = myproc();
+    char path[MAXPATH], *argv[MAXARG + 1];
+    uint32_t upath, uargv, uarg;
+    int ret = -1;
+
+    argaddr(0, &upath);
+    if (copyinstr(p->pt, path, upath, MAXPATH) < 0) return -1;
+    argaddr(1, &uargv);
+
+    // The strings go in a kernel page, packed one after another: too big for
+    // the 4 KB kernel stack
+    char *buf = kalloc();
+    if (buf == NULL) return -1;
+    uint32_t used = 0; // bytes of buf filled so far
+
+    if (uargv == 0) {
+        argv[0] = 0; // no arguments
+    } else {
+        int i = 0;
+        while (1) {
+            if (copyin(p->pt, (char *)&uarg, uargv + 4 * i, 4) < 0) goto out;
+            if (uarg == 0) { // end of the list (still fits with MAXARG arguments)
+                argv[i] = 0;
+                break;
+            }
+            if (i == MAXARG) goto out; // too many arguments
+            argv[i] = buf + used;
+            if (copyinstr(p->pt, argv[i], uarg, PAGE_SIZE - used) < 0) goto out;
+            used += strlen(argv[i]) + 1;
+            i++;
+        }
+    }
+    ret = kexec(path, argv);
+
+out:
+    kfree(buf); // on success kexec has already copied the strings to the new stack
+    return ret;
 }
 
 uint32_t sys_fork() {

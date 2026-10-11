@@ -21,6 +21,15 @@ uint32_t strlen(char *str)
     return count;
 }
 
+// Returns 0 if a and b are equal, <0 if a sorts before b, >0 if after
+int strcmp(const char *a, const char *b) {
+    while (*a != '\0' && *a == *b) {
+        a++;
+        b++;
+    }
+    return (unsigned char)*a - (unsigned char)*b;
+}
+
 void error(char *str)
 {
     printf("error: %s\n", str);

@@ -65,12 +65,22 @@ $U/init.elf: $U/init.o $U/user.ld
 $U/init.bin: $U/init.elf
 	$(OBJCOPY) -S -O binary $< $@
 
-# 4. Convert Binary to C Header (Hex Dump)
-# Requires 'xxd' tool (standard on Linux/WSL)
-# This creates 'unsigned char user_init_bin[]' inside initcode.h
-$(INITCODE_HEADER): $U/init.bin $U/init.elf
+# 4. Build the second user program (exec's first target) the same way
+$U/hello.o: $U/hello.S
+	@mkdir -p $U
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$U/hello.elf: $U/hello.o $U/user.ld
+	$(LD) -nostdlib $(ARCH) -T $U/user.ld -o $@ $<
+
+# 5. Convert the images to a C header (hex dump)
+# Requires 'xxd' tool (standard on Linux/WSL). xxd names each array after the
+# path: user/init.elf -> unsigned char user_init_elf[] + user_init_elf_len.
+# Only the first line uses '>' (start a fresh file); the rest append with '>>'.
+$(INITCODE_HEADER): $U/init.bin $U/init.elf $U/hello.elf
 	xxd -i $U/init.bin > $@
 	xxd -i $U/init.elf >> $@
+	xxd -i $U/hello.elf >> $@
 
 # --- RUN ---
 

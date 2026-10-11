@@ -6,7 +6,6 @@
 #include "spinlock.h"
 #include "rv.h"
 #include "uart.h"
-#include "initcode.h"
 #include "exec.h"
 
 struct cpu cpus[NCPU];
@@ -165,7 +164,7 @@ void releaseproc(struct proc *p)
 }
 
 // Executes the first user mode program in the kernel.
-void uvmfirst(struct proc *p, uint32_t sepc, uint32_t sp)
+void uvmfirst(struct proc *p, uint32_t sp)
 {
     lock(&p->lock);
 
@@ -184,8 +183,12 @@ void uvmfirst(struct proc *p, uint32_t sepc, uint32_t sp)
     // }
 
     // Load init's code and data from its embedded ELF image
+    const uint8_t *img;
+    uint32_t len;
+    if (find_program("init", &img, &len) < 0)
+        panic("uvmfirst: no init program");
     uint32_t entry, sz;
-    if (load_elf(p->pt, user_init_elf, user_init_elf_len, &entry, &sz) < 0)
+    if (load_elf(p->pt, img, len, &entry, &sz) < 0)
         panic("uvmfirst: cannot load init ELF");
 
 
@@ -275,7 +278,7 @@ void init_userproc()
     p = procalloc();
     if (!p)
         panic("init_userproc: procalloc fail");
-    uvmfirst(p, USER_BASE, (uint32_t)USER_STACK_TOP);
+    uvmfirst(p, (uint32_t)USER_STACK_TOP);
 }
 
 // CPU continously loop through scheduler when CPU is idle
