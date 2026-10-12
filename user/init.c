@@ -36,11 +36,13 @@ int main(void) {
     char *echo_argv[] = { "echo", "hello", "from", "init", 0 };
     char *hello_argv[] = { "hello", "a", "b", 0 };
     char *nope_argv[] = { "nope", 0 }; // no such program: shows the failure path
+    char *foo_argv[] = {"foo", "printing", "a", "program", "from", "foo", 0};
 
     printf("init: starting (pid %d)\n", getpid());
     run(echo_argv);
     run(hello_argv);
     run(nope_argv);
+    run(foo_argv);
 
     // Never return. Keep reaping orphans; with no children at all wait fails
     // at once, so sleep instead of spinning the CPU.

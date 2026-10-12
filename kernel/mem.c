@@ -6,7 +6,7 @@
 // Kernel file for memory management
 // Allocates physical memory
 
-// Bitmap of available physical memories in form of pages. 1 is available, 0 is occupied page. (HIGHLIGHT THIS IN README)
+// Bitmap of available physical memories in form of pages. 1 is available, 0 is occupied page.
 static uint8_t mem_bitmap[NUM_PAGES];
 static char *start_page;
 static struct spinlock mem_lock; // guards mem_bitmap; every hart allocates
