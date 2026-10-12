@@ -137,8 +137,6 @@ void u_trap_handle(uint32_t scause, uint32_t sepc) {
 
 // Handle traps happening in s-mode/kernelmode
 void s_trap_handle(uint32_t scause, uint32_t sepc) {
-    // A handler that ends up yielding (M1) may take other traps before we
-    // return here, which would clobber these CSRs.
     uint32_t sstatus = r_sstatus();
 
     if ((sstatus & SSTATUS_SPP) == 0)

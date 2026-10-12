@@ -80,11 +80,11 @@ $U/%.elf: $U/%.o $(ULIB) $U/user.ld
 # Requires 'xxd' tool (standard on Linux/WSL). xxd names each array after the
 # path: user/init.elf -> unsigned char user_init_elf[] + user_init_elf_len.
 # Only the first line uses '>' (start a fresh file); the rest append with '>>'.
-$(INITCODE_HEADER): $U/init.elf $U/hello.elf $U/echo.elf $U/foo.elf
+$(INITCODE_HEADER): $U/init.elf $U/hello.elf $U/echo.elf #$U/foo.elf
 	xxd -i $U/init.elf > $@
 	xxd -i $U/hello.elf >> $@
 	xxd -i $U/echo.elf >> $@
-	xxd -i $U/foo.elf >> $@
+# 	xxd -i $U/foo.elf >> $@
 # --- RUN ---
 
 QEMUOPTS = -machine virt -bios none -kernel $(OUTPUT) -nographic -serial mon:stdio -smp $(CPUS)

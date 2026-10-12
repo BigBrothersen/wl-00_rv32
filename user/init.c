@@ -1,8 +1,3 @@
-// init: pid 1, the first user process. The kernel starts it (uvmfirst) with
-// no arguments, and every other process descends from it. It must never exit:
-// kexit hands orphans to pid 1, and only init can reap them.
-// For now it runs a few programs one after another; in M3 it will start the
-// shell and restart it whenever it exits.
 #include "user.h"
 
 // Run one program and wait for it. Returns its exit status, or -1.
@@ -36,16 +31,14 @@ int main(void) {
     char *echo_argv[] = { "echo", "hello", "from", "init", 0 };
     char *hello_argv[] = { "hello", "a", "b", 0 };
     char *nope_argv[] = { "nope", 0 }; // no such program: shows the failure path
-    char *foo_argv[] = {"foo", "printing", "a", "program", "from", "foo", 0};
+    // char *foo_argv[] = {"foo", "printing", "a", "program", "from", "foo", 0};
 
     printf("init: starting (pid %d)\n", getpid());
     run(echo_argv);
     run(hello_argv);
     run(nope_argv);
-    run(foo_argv);
+    // run(foo_argv);
 
-    // Never return. Keep reaping orphans; with no children at all wait fails
-    // at once, so sleep instead of spinning the CPU.
     for (;;) {
         if (wait(0) < 0)
             sleep(100);

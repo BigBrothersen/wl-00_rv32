@@ -1,7 +1,7 @@
 # wl-00_RV32
 
 wl-00_RV32 is a small multi-core operating system for 32-bit RISC-V, written
-from scratch and heavily inspired by [xv6-riscv](https://github.com/mit-pdos/xv6-riscv).
+from scratch and modeled on MIT's [xv6-riscv](https://github.com/mit-pdos/xv6-riscv).
 It runs on QEMU's `virt` machine.
 
 ## Features
@@ -28,6 +28,48 @@ Implemented so far:
 - **Preemptive scheduler** running on up to 4 harts (CPU cores).
 - **System calls:** `fork`, `exec`, `wait`, `exit` and `sleep`.
 - **User programs in C,** loaded from ELF images and started with `argc`/`argv`.
+
+## What's different from xv6
+
+The overall structure follows xv6: an M-mode boot that hands over to an S-mode
+kernel, a scheduler loop on every hart, `sleep`/`wakeup`, and Unix-style
+`fork`/`exec`/`wait`. These parts are done differently:
+
+| Area | wl-00_RV32 | xv6-riscv |
+|---|---|---|
+| Architecture | RV32IMA with Sv32: two-level page tables, 32-bit entries | RV64GC with Sv39: three-level page tables, 64-bit entries |
+| 64-bit timer registers | Split into 32-bit halves (`time`/`timeh`, `stimecmp`/`stimecmph`), read and written in a specific order | Each fits in one 64-bit register |
+| Physical page allocator | Bitmap, one byte per 4 KB page | Linked list threaded through the free pages |
+| Kernel in user page tables | Identity-mapped, supervisor-only, in every process's page table | Not mapped; only the trampoline and trapframe pages are |
+| User memory layout | Page 0 unmapped, programs start at 0x1000; one stack page at a fixed address near the top | Programs start at address 0; the stack sits just above the program, with a guard page |
+| Where programs come from | ELF images built into the kernel, looked up by name | ELF files read from the filesystem |
+
+What each difference means in practice:
+
+- **32-bit registers.** Anything 64-bit has to be handled in two halves. Reading
+  the time takes high, low, then high again, retrying if the high half changed,
+  because a carry between the two reads would otherwise give a value that is
+  off by about 7 minutes. Writing the next timer deadline first sets the low half
+  to `0xFFFFFFFF`, so the half-written value can never be in the past and fire
+  an interrupt too early. The kernel also avoids 64-bit division, which would
+  need libgcc.
+- **Bitmap allocator.** The allocator's state is a single array, easy to inspect
+  in a debugger, and counting free pages is a simple loop. No bookkeeping is
+  stored inside free pages. The trade-off is a linear scan on every allocation.
+- **Kernel mapped into every process.** The trap entry and exit code runs at its
+  own address under either page table, so it needs no special mapping at the top
+  of the address space. In exchange, user programs must fit below 0x10000000,
+  under the UART, and the kernel's memory is protected only by its pages not
+  being user-accessible.
+- **Page 0 unmapped.** A null-pointer access in a user program faults, and the
+  process is killed with a diagnostic, instead of silently reading the program's
+  first instructions.
+- **Programs built into the kernel.** `exec`, ELF loading and C programs all work
+  before any disk driver or filesystem exists. The loader checks every header
+  and segment against the image's size and the user address range, and maps
+  ELF segment permissions onto page permissions: code R+X, data R+W.
+- **Syscall stubs from the preprocessor.** The same header serves the kernel's C
+  code and the user-side assembly, and the build needs no extra tools.
 
 ## Running it
 
@@ -199,6 +241,27 @@ To add a program called `foo`:
 
 It can then be started with `exec("foo", argv)`, for example through `run()` in
 `user/init.c`.
+
+## Example output
+```
+qemu-system-riscv32 -machine virt -bios none -kernel kernel.elf -nographic -serial mon:stdio -smp 4
+
+wl-00 kernel is booting
+Main cpu 0 initialized!
+cpu 2 initialized
+cpu 3 initialized
+cpu 1 initialized
+init: starting (pid 1)
+hello from init
+init: echo (pid 2) exited with status 0
+Hello from exec
+hello
+a
+b
+init: hello (pid 3) exited with status 7
+init: exec nope failed
+init: nope (pid 4) exited with status 1
+```
 
 ## References
 
