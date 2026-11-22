@@ -17,7 +17,7 @@ LDFLAGS = -T $K/kernel.ld -nostdlib -ffreestanding $(ARCH) -Wl,--no-warn-rwx-seg
 
 # Source Files
 C_SRC = $K/main.c $K/uart.c $K/kprint.c $K/boot.c $K/csr.c $K/mem.c \
-        $K/vm.c $K/trap.c $K/spinlock.c $K/gpr.c $K/rv.c $K/proc.c $K/syscall.c $K/exec.c
+        $K/vm.c $K/trap.c $K/spinlock.c $K/gpr.c $K/rv.c $K/proc.c $K/syscall.c $K/exec.c $K/plic.c
 ASM_SRC = $K/boot_asm.S $K/kerneltrap.S $K/usertrap.S $K/usertrapret.S $K/swtch.S
 
 # Object files

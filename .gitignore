@@ -4,3 +4,4 @@
 *.elf
 *.bin
 kernel/initcode.h
+.vscode

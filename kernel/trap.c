@@ -8,6 +8,8 @@
 #include "syscall.h"
 #include "spinlock.h"
 #include "rv.h"
+#include "plic.h"
+#include "uart.h"
 
 void kerneltrap();  // kerneltrap.S
 void usertrap();    // usertrap.S
@@ -49,6 +51,10 @@ static int devintr(uint32_t scause)
             clockintr();
             return 2;
         case 9: // code 9
+            // printf("test");
+            int irq = plic_claim();
+            if (irq == UART_0_IRQ) uart_intr();
+            if (irq) plic_complete(irq);
             return 3;
         default:
             return 0;

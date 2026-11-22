@@ -5,7 +5,7 @@
 #include "csr.h"
 #include "vm.h"
 #include "proc.h"
-
+#include "plic.h"
 #include "kprint.h"
 
 /*
@@ -36,6 +36,9 @@ pagetable_t kptable_make() {
 
     // Initialize UART
     mappages(kpt, UART_0, UART_0, PAGE_SIZE, PTE_R | PTE_W);
+
+    // Map PLIC
+    mappages(kpt, PLIC, PLIC, 0x208000, PTE_R | PTE_W);
     
     // Map kernel text (read only)
     uint32_t etext_aligned = PGROUNDUP((uint32_t)&_etext);

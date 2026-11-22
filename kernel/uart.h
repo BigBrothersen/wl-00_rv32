@@ -4,6 +4,7 @@
 // NS16550A-compatible UART, as found on QEMU virt (and most RISC-V SoCs and
 // FPGA soft-SoCs). Registers are one byte wide, one byte apart.
 #define UART_0 0x10000000
+#define UART_0_IRQ 10
 
 #define UART_RBR 0x00   // Receive buffer (read, DLAB=0)
 #define UART_THR 0x00   // Transmit holding (write, DLAB=0)
@@ -28,5 +29,6 @@
 void uart_init();
 void uart_putc(char c);
 int uart_getc();
+void uart_intr();
 
 #endif

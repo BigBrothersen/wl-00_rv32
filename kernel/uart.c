@@ -25,6 +25,14 @@ void uart_init()
 
     *UART_REG(UART_LCR) = UART_LCR_8N1; // 8 data bits, no parity, 1 stop bit, DLAB off
     *UART_REG(UART_FCR) = UART_FCR_ENABLE | UART_FCR_CLEAR;
+    *UART_REG(UART_IER) = UART_IER_RX; // Enable RX data
+}
+
+// Called when there is a UART interrupt
+void uart_intr()
+{
+    int c;
+    while ((c = uart_getc()) != -1) uart_putc(c);
 }
 
 // Blocking transmit: wait until the transmitter can take another byte.

@@ -9,6 +9,7 @@
 #include "proc.h"
 #include "csr.h"
 #include "uart.h"
+#include "plic.h"
 
 // Set by hart 0 once the kernel is initialized. Lives in .data rather than
 // .bss so it is valid before hart 0 has zeroed .bss (see boot_asm.S).
@@ -25,6 +26,8 @@ void main() {
         init_kvmhart();
         init_clock();
         init_trap();
+        init_plic();
+        init_plichart();
         init_proctable();
         init_userproc();
         printf("Main cpu %d initialized!\n", r_tp());
@@ -37,6 +40,7 @@ void main() {
         cpus[r_tp()].id = r_tp();
         init_kvmhart(); // turn on paging on this hart
         init_trap();    // install this hart's kernel trap vector
+        init_plichart();
         printf("cpu %d initialized\n", r_tp());
     }
     scheduler();
