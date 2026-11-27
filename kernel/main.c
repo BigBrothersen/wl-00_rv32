@@ -10,6 +10,7 @@
 #include "csr.h"
 #include "uart.h"
 #include "plic.h"
+#include "console.h"
 
 // Set by hart 0 once the kernel is initialized. Lives in .data rather than
 // .bss so it is valid before hart 0 has zeroed .bss (see boot_asm.S).
@@ -30,6 +31,7 @@ void main() {
         init_plichart();
         init_proctable();
         init_userproc();
+        init_console();
         printf("Main cpu %d initialized!\n", r_tp());
         __sync_synchronize(); // publish everything above before releasing the other harts
         init = 1;

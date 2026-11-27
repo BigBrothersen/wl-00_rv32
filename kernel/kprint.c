@@ -5,8 +5,11 @@
 #include "spinlock.h"
 #include "rv.h"
 #include "csr.h"
+#include "console.h"
 
 const char *digits = "0123456789abcdef";
+
+// TO BE DEPRECATED
 
 int hang = 0;
 
@@ -47,10 +50,10 @@ void panic(char *str)
         ;
 }
 
-void putchar(char c)
-{
-    uart_putc(c);
-}
+// void putchar(char c)
+// {
+//     uart_putc(c);
+// }
 
 void print_string(char *str)
 {

@@ -2,7 +2,7 @@
 #define __KPRINT__
 #include <stdint.h>
 
-void putchar(char c);
+// void putchar(char c);
 void print_string(char *c);
 void printf(char *fmt, ...);
 void print_addr(uint32_t addr);

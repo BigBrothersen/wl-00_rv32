@@ -32,12 +32,14 @@ int main(void) {
     char *hello_argv[] = { "hello", "a", "b", 0 };
     char *nope_argv[] = { "nope", 0 }; // no such program: shows the failure path
     // char *foo_argv[] = {"foo", "printing", "a", "program", "from", "foo", 0};
+    char *terminal_argv[] = {"terminal", "hello", "from", "init", 0};
 
     printf("init: starting (pid %d)\n", getpid());
     run(echo_argv);
-    run(hello_argv);
-    run(nope_argv);
+    // run(hello_argv);
+    // run(nope_argv);
     // run(foo_argv);
+    run(terminal_argv);
 
     for (;;) {
         if (wait(0) < 0)

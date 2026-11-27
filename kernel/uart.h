@@ -30,5 +30,6 @@ void uart_init();
 void uart_putc(char c);
 int uart_getc();
 void uart_intr();
+void uart_write(char buf[], int n);
 
 #endif

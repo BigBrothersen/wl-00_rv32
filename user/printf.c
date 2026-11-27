@@ -3,7 +3,6 @@
 #include <stdarg.h>
 #include "user.h"
 
-// One syscall per character: slow but simple
 static void putc(char c) {
     write(1, &c, 1);
 }

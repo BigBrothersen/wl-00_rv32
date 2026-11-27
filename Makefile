@@ -17,7 +17,7 @@ LDFLAGS = -T $K/kernel.ld -nostdlib -ffreestanding $(ARCH) -Wl,--no-warn-rwx-seg
 
 # Source Files
 C_SRC = $K/main.c $K/uart.c $K/kprint.c $K/boot.c $K/csr.c $K/mem.c \
-        $K/vm.c $K/trap.c $K/spinlock.c $K/gpr.c $K/rv.c $K/proc.c $K/syscall.c $K/exec.c $K/plic.c
+        $K/vm.c $K/trap.c $K/spinlock.c $K/gpr.c $K/rv.c $K/proc.c $K/syscall.c $K/exec.c $K/plic.c $K/console.c
 ASM_SRC = $K/boot_asm.S $K/kerneltrap.S $K/usertrap.S $K/usertrapret.S $K/swtch.S
 
 # Object files
@@ -80,11 +80,11 @@ $U/%.elf: $U/%.o $(ULIB) $U/user.ld
 # Requires 'xxd' tool (standard on Linux/WSL). xxd names each array after the
 # path: user/init.elf -> unsigned char user_init_elf[] + user_init_elf_len.
 # Only the first line uses '>' (start a fresh file); the rest append with '>>'.
-$(INITCODE_HEADER): $U/init.elf $U/hello.elf $U/echo.elf #$U/foo.elf
+$(INITCODE_HEADER): $U/init.elf $U/hello.elf $U/echo.elf $U/terminal.elf
 	xxd -i $U/init.elf > $@
 	xxd -i $U/hello.elf >> $@
 	xxd -i $U/echo.elf >> $@
-# 	xxd -i $U/foo.elf >> $@
+	xxd -i $U/terminal.elf >> $@
 # --- RUN ---
 
 QEMUOPTS = -machine virt -bios none -kernel $(OUTPUT) -nographic -serial mon:stdio -smp $(CPUS)
