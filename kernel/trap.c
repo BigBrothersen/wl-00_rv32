@@ -122,6 +122,8 @@ void u_trap_handle(uint32_t scause, uint32_t sepc) {
         }
     }
     else if (scause == SCAUSE_USER_ECALL) {
+        if (p->killed)
+            kexit(-1);
         p->tf->epc += 4;
         interrupt_on();
         syscall();  // handle the syscall
@@ -133,6 +135,8 @@ void u_trap_handle(uint32_t scause, uint32_t sepc) {
                p->pid, p->name, scause, sepc, r_stval());
         kexit(-1);
     }
+    if (p->killed) 
+        kexit(-1);
     // Timer tick: give up the CPU so other processes get a turn (preemption).
     // Safe here: the user pc is already saved in p->tf and no locks are held.
     // If we resume on another hart, utrapret() sets everything up for that hart.

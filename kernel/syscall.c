@@ -157,7 +157,9 @@ uint32_t sys_brk(){
 }
 
 uint32_t sys_kill(){
-    return -1;
+    int pid;
+    argint(0, &pid);
+    return kkill(pid);
 }
 
 // sleep(n): put the caller to sleep for n clock ticks (n / TICK_HZ seconds),

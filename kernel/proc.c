@@ -157,6 +157,7 @@ void releaseproc(struct proc *p)
     p->sz = 0;
     p->tf = NULL;
     p->parent = NULL;
+    p->killed = 0;
     p->xstate = 0;
     p->chan = NULL;
     memset(&p->context, 0, sizeof(p->context));
@@ -495,4 +496,22 @@ void kexit(int status)
     unlock(&wait_lock); // sched() requires p->lock to be the only lock held
     sched(); // never returns
     panic("kexit: zombie returned");
+}
+
+int kkill(int pid) {
+    if (pid == 0) return -1;
+    struct proc *p;
+    for (p = proctable; p < &proctable[NPROC]; p++) {
+        lock(&p->lock);
+        if (p->pid == pid) {
+            p->killed = 1;
+            if (p->state == WAITING) {
+                p->state = READY;
+            }
+            unlock(&p->lock);
+            return 0;
+        }
+        unlock(&p->lock);
+    }
+    return -1;
 }
