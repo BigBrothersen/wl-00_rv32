@@ -4,6 +4,7 @@
 #include "sysnum.h"
 #include "trap.h"
 #include "exec.h"
+#include "console.h"
 // #include "fd.h"
 
 uint32_t argraw(int n) {
@@ -103,7 +104,16 @@ uint32_t sys_fork() {
 }
 
 uint32_t sys_read() {
-    return -1;
+    int fd;
+    uint32_t p_buf; // User Virtual Address
+    int n;
+
+    // Fetch Arguments
+    argint(0, &fd);
+    argaddr(1, &p_buf); // Fetches a0, a1, a2
+    argint(2, &n);
+    if (fd != 0 || n < 0) return -1;
+    return console_read(p_buf, n);
 }
 
 uint32_t sys_write() {

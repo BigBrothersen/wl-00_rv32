@@ -10,6 +10,7 @@
 enum procstate { UNUSED, NEW, READY, RUNNING, WAITING, ZOMBIE };
 
 
+// HARD CODED, DO NOT CHANGE
 struct context {
     uint32_t ra;
     uint32_t sp;
@@ -48,6 +49,7 @@ struct proc {
     uint32_t kstack; // top of the kstack, s-mode region of the process
     uint32_t sz; // size of process
     struct trapframe_t *tf; // trapframe of process
+    int killed; // whether the process is killed
     int xstate; // exit status, valid once state == ZOMBIE
     void *chan;
     struct spinlock lock;

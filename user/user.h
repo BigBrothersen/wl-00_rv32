@@ -3,6 +3,10 @@
 #ifndef __USER_H__
 #define __USER_H__
 
+// defs
+#define NULL ((void *)0)
+
+
 // syscalls
 void exit(int status) __attribute__((noreturn));
 int fork(void);

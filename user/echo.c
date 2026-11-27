@@ -8,7 +8,7 @@ int main(int argc, char *argv[]) {
         else printf("%s", argv[i]);
     }
     printf("\n");
-    printf("Starting terminal\n");
+    printf("Echo is here\n");
     // while(1);
     return 0;
 }
