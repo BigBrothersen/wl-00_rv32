@@ -30,11 +30,6 @@ static int is_delim(char c, const char *delim) {
     return 0;
 }
 
-// Splits str into tokens separated by any character in delim (e.g. " \t\n").
-// First call: pass the string. Later calls: pass NULL to continue where the
-// last one stopped. Returns the next token, or NULL when there are no more.
-// Modifies str (writes '\0' over each delimiter that ends a token) and keeps
-// its position in a static, so only one string can be tokenized at a time.
 char *strtok(char *str, const char *delim) {
     static char *next; // where the next search starts
 
@@ -60,6 +55,43 @@ char *strtok(char *str, const char *delim) {
         next = NULL;  // hit the end: the next call returns NULL
     }
     return token;
+}
+
+int isdigit(char c) {
+    if ((int)c-(int)'0' < 0 || (int)c-(int)'0' > 9) {
+        return 0;
+    }
+    return 1;
+}
+
+int stoi(char *str) {
+    int n = strlen(str);
+    if (n == 0) return 0;
+
+    int i = 0;
+    while (i < n && str[i] == ' ') {
+        i++;
+    }
+
+    if (i == n) return 0;
+
+    int sign = 1;
+    if (str[i] == '+') {
+        i++;
+    }
+    else if (str[i] == '-') {
+        sign = -1;
+        i++;
+    }
+    long long res = 0;
+    while (i < n && isdigit(str[i])) {
+        int digit = str[i] - '0';
+        res = res*10 + digit;
+        if (sign*res >= INT_MAX) return INT_MAX;
+        if (sign*res <= INT_MIN) return INT_MIN;
+        i++;
+    }
+    return (int)res*sign;
 }
 
 // Returns 0 if a and b are equal, <0 if a sorts before b, >0 if after
@@ -95,4 +127,8 @@ void *memmove(void *dst, const void *src, unsigned int len) {
 
 void *memcpy(void *dst, const void *src, unsigned int len) {
     return memmove(dst, src, len);
+}
+
+int usergetpid(void) {
+    return getpid();
 }

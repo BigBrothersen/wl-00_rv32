@@ -34,19 +34,25 @@ int main(void) {
         if (argc == 0) continue;
 
         // Debug
-        // for (int i = 0; i < argc; i++) {
-        //     printf("[%s] ", argv[i]);
-        // }
-        // printf("\n");
+        for (int i = 0; i < argc; i++) {
+            printf("[%s] ", argv[i]);
+        }
+        printf("\n");
+        printf("strcmp %d\n", strcmp(argv[0], "getpid"));
+        if (strcmp(argv[0], "getpid") == 0) {
+            printf("This terminal is running on pid %d\n", usergetpid());
+            continue;
+        }
 
         int pid = fork();
         int status;
         if (pid < 0) {
-            printf("ERROR: fork failed");
+            printf("ERROR: fork failed\n");
+            continue;
         }
         if (pid == 0) {
             if (exec(argv[0], argv) < 0) {
-                printf("init: exec %s failed\n", argv[0]);
+                printf("sh: %s: command not found\n", argv[0]);
                 exit(1); // or the child would carry on as a second init
             }
         }
@@ -54,11 +60,10 @@ int main(void) {
             while (1) {
                 int w = wait(&status);
                 if (w == pid) break;
-                if (w < 0) return -1;
+                if (w < 0) exit(-1);
             }
         } 
     }
     printf("Terminal exited\n");
-
     exit(0);
 }

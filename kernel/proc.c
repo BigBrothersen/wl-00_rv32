@@ -131,9 +131,35 @@ void print_proc(struct proc p)
 // Debug: prints the process table
 void print_proctable()
 {
-    for (int i = 0; i < NPROC; i++) {
-        printf("%d sp %p\n", i, proctable[i].kstack);
-  }
+    static char *states[] = {
+        // clang-format off
+        [UNUSED]    = "unused",
+        [NEW]      = "new",
+        [READY]  = "ready ",
+        [RUNNING]   = "run   ",
+        [WAITING]  = "waiting",
+        [ZOMBIE]    = "zombie"
+        // clang-format on
+    };
+    struct proc *p;
+    char *state;
+    printf("\n");
+    for (p = proctable; p < &proctable[NPROC]; p++) {
+        if (p->state == UNUSED) {
+            continue;
+        }
+        if (p->state >= 0 && p->state < NELEM(states) && states[p->state]){
+            state = states[p->state];  
+        }
+        else {
+            state == "???";
+        }
+        printf("%d %s %s", p->pid, state, p->name);
+        printf("\n");
+    }
+//     for (int i = 0; i < NPROC; i++) {
+//         printf("%d sp %p\n", i, proctable[i].kstack);
+//   }
 }
 
 // Frees everything owned by a proc slot (tf, kstack, and pt if it's still

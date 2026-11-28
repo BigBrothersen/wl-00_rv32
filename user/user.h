@@ -7,7 +7,8 @@
 #define NULL ((void *)0)
 #define MAXARGS 16
 #define MAXBUF 256
-
+#define INT_MAX 0x7fffffff
+#define INT_MIN (-INT_MAX - 1)
 
 // syscalls
 void exit(int status) __attribute__((noreturn));
@@ -27,6 +28,9 @@ int strcmp(const char *a, const char *b);
 void *memset(void *dst, int c, unsigned int n);
 void *memcpy(void *dst, const void *src, unsigned int n);
 void *memmove(void *dst, const void *src, unsigned int n);
+int usergetpid(void);
+int stoi(char *str);
+int isdigit(char c);
 
 // printf.c
 void printf(const char *fmt, ...);

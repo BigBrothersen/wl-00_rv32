@@ -9,6 +9,7 @@
 
 enum procstate { UNUSED, NEW, READY, RUNNING, WAITING, ZOMBIE };
 
+#define NELEM(x) (sizeof(x) / sizeof((x)[0]))
 
 // HARD CODED, DO NOT CHANGE
 struct context {

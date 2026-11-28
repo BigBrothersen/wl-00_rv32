@@ -28,13 +28,17 @@ static int run(char *argv[]) {
 }
 
 int main(void) {
+    if (getpid() != 1) {
+        printf("ERROR init: multiple instance\n");
+        exit(1);
+    }
     // char *echo_argv[] = { "echo", "hello", "from", "init", 0 };
     char *terminal_argv[] = {"terminal", 0};
 
     printf("init: starting (pid %d)\n", getpid());
-    run(terminal_argv);
-
+    
     for (;;) {
+        run(terminal_argv);
         if (wait(0) < 0)
             sleep(100);
     }

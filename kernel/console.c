@@ -44,6 +44,9 @@ void init_console() {
 void console_intr(int c) {
     lock(&cons.lock);
     switch(c) {
+        case C('P'): // print process list
+            print_proctable();
+            break;
         case C('U'): // erase to the back of the line
             while (cons.e != cons.w && cons.buf[(cons.e - 1) % BUF_SIZE] != '\n') {
                 consputc(BACKSPACE);
