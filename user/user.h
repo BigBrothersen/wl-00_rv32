@@ -5,6 +5,8 @@
 
 // defs
 #define NULL ((void *)0)
+#define MAXARGS 16
+#define MAXBUF 256
 
 
 // syscalls
@@ -19,6 +21,7 @@ int sleep(int ticks);
 int kill(int pid);
 
 // ulib.c
+char *strtok(char *str, const char *delim);
 unsigned int strlen(const char *s);
 int strcmp(const char *a, const char *b);
 void *memset(void *dst, int c, unsigned int n);

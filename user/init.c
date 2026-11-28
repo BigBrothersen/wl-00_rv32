@@ -28,17 +28,10 @@ static int run(char *argv[]) {
 }
 
 int main(void) {
-    char *echo_argv[] = { "echo", "hello", "from", "init", 0 };
-    char *hello_argv[] = { "hello", "a", "b", 0 };
-    char *nope_argv[] = { "nope", 0 }; // no such program: shows the failure path
-    // char *foo_argv[] = {"foo", "printing", "a", "program", "from", "foo", 0};
-    char *terminal_argv[] = {"terminal", "hello", "from", "init", 0};
+    // char *echo_argv[] = { "echo", "hello", "from", "init", 0 };
+    char *terminal_argv[] = {"terminal", 0};
 
     printf("init: starting (pid %d)\n", getpid());
-    run(echo_argv);
-    // run(hello_argv);
-    // run(nope_argv);
-    // run(foo_argv);
     run(terminal_argv);
 
     for (;;) {

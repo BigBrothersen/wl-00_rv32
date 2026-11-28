@@ -21,6 +21,47 @@ unsigned int strlen(const char *str)
     return count;
 }
 
+
+// 1 if c is one of the characters in delim
+static int is_delim(char c, const char *delim) {
+    for (; *delim != '\0'; delim++) {
+        if (c == *delim) return 1;
+    }
+    return 0;
+}
+
+// Splits str into tokens separated by any character in delim (e.g. " \t\n").
+// First call: pass the string. Later calls: pass NULL to continue where the
+// last one stopped. Returns the next token, or NULL when there are no more.
+// Modifies str (writes '\0' over each delimiter that ends a token) and keeps
+// its position in a static, so only one string can be tokenized at a time.
+char *strtok(char *str, const char *delim) {
+    static char *next; // where the next search starts
+
+    if (str != NULL) next = str;
+    if (next == NULL) return NULL;
+
+    // skip leading delimiters
+    while (*next != '\0' && is_delim(*next, delim)) next++;
+    if (*next == '\0') {
+        next = NULL; // no tokens left
+        return NULL;
+    }
+
+    // the token runs until the next delimiter or the end of the string
+    char *token = next;
+    while (*next != '\0' && !is_delim(*next, delim)) next++;
+
+    if (*next != '\0') {
+        *next = '\0'; // terminate this token
+        next++;       // next search starts after it
+    }
+    else {
+        next = NULL;  // hit the end: the next call returns NULL
+    }
+    return token;
+}
+
 // Returns 0 if a and b are equal, <0 if a sorts before b, >0 if after
 int strcmp(const char *a, const char *b) {
     while (*a != '\0' && *a == *b) {
